@@ -1,0 +1,24 @@
+# Dependencias y builds
+node_modules/
+dist/
+out/
+build/
+target/
+release/
+
+# Secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.*
+
+# Sistema / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log

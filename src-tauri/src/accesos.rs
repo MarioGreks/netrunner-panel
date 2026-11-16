@@ -438,8 +438,8 @@ mod tests {
     fn nombres_deducidos() {
         assert_eq!(deducir_nombre(r"C:\Program Files\Mozilla Firefox\firefox.exe", "app"), "firefox");
         assert_eq!(deducir_nombre(r"C:\Users\x\Desktop\Mi Juego.lnk", "app"), "Mi Juego");
-        assert_eq!(deducir_nombre(r"D:\Mario\Proyectos\", "carpeta"), "Proyectos");
-        assert_eq!(deducir_nombre(r"D:\Mario\Proyectos", "carpeta"), "Proyectos");
+        assert_eq!(deducir_nombre(r"D:\Usuario\Proyectos\", "carpeta"), "Proyectos");
+        assert_eq!(deducir_nombre(r"D:\Usuario\Proyectos", "carpeta"), "Proyectos");
         assert_eq!(deducir_nombre(r"D:\", "carpeta"), r"D:\");
         assert_eq!(deducir_nombre(r"D:\docs\informe.final.pdf", "archivo"), "informe.final");
         assert_eq!(deducir_nombre("https://www.ejemplo.com/ruta/a?x=1", "url"), "ejemplo.com");

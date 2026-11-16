@@ -1,7 +1,7 @@
 //! Módulo CALENDARIO: agenda de solo lectura a partir de una URL ICS (Outlook).
 //!
 //! Descarga el ICS (reqwest bloqueante, timeout de 15 s), lo interpreta con `ical`,
-//! expande recurrencias con `rrule` y devuelve los eventos de los próximos 14 días en
+//! expande recurrencias con `rrule` y devuelve los eventos de los próximos ~6 meses en
 //! hora local. La URL es privada: jamás se escribe en logs ni en mensajes de error.
 //! El último resultado bueno se guarda en `app_data_dir()/calendario.json`.
 
@@ -20,19 +20,32 @@ use tauri::{AppHandle, Emitter, Listener, Manager, State};
 
 use crate::estado::Estado;
 
-const DIAS_VENTANA: i64 = 14;
+/// Unos 6 meses. Cada RRULE se expande solo dentro de la ventana (`after`/`before`) y con
+/// un tope de `MAX_OCURRENCIAS`, así que el coste no depende de cuántos años dura la serie.
+const DIAS_VENTANA: i64 = 183;
+const MAX_DESCRIPCION: usize = 200;
 const INTERVALO_SYNC: Espera = Espera::from_secs(600);
 const EDAD_MAX_AL_MOSTRAR: Espera = Espera::from_secs(30);
 const MAX_OCURRENCIAS: u16 = 1000;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Evento {
+    /// Estable por ocurrencia: `uid|inicio UTC` (en excepciones, el RECURRENCE-ID original).
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub uid: String,
     pub titulo: String,
     pub inicio: DateTime<FixedOffset>,
     /// Para eventos de día completo, el fin es exclusivo (00:00 del día siguiente).
     pub fin: DateTime<FixedOffset>,
     pub todo_el_dia: bool,
     pub ubicacion: Option<String>,
+    #[serde(default)]
+    pub categorias: Vec<String>,
+    /// Primeras ~200 letras de DESCRIPTION, sin escapes.
+    #[serde(default)]
+    pub descripcion: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -164,6 +177,8 @@ struct Crudo {
     uid: String,
     titulo: String,
     ubicacion: Option<String>,
+    categorias: Vec<String>,
+    descripcion: Option<String>,
     cancelado: bool,
     inicio: Option<Fecha>,
     fin: Option<Fecha>,
@@ -262,6 +277,30 @@ fn desescapar(s: &str) -> String {
     fuera.trim().to_string()
 }
 
+/// Separa un valor CATEGORIES por comas sin escapar; `\,` es una coma dentro del nombre.
+fn separar_categorias(valor: &str) -> Vec<String> {
+    let mut resultado = Vec::new();
+    let mut actual = String::new();
+    let mut it = valor.chars();
+    while let Some(c) = it.next() {
+        match c {
+            '\\' => {
+                if let Some(o) = it.next() {
+                    actual.push(o);
+                }
+            }
+            ',' => resultado.push(std::mem::take(&mut actual)),
+            _ => actual.push(c),
+        }
+    }
+    resultado.push(actual);
+    resultado
+        .into_iter()
+        .map(|c| c.trim().to_string())
+        .filter(|c| !c.is_empty())
+        .collect()
+}
+
 fn crudo_desde(ev: &ical::parser::ical::component::IcalEvent, local: Tz) -> Crudo {
     let mut c = Crudo::default();
     for p in &ev.properties {
@@ -273,6 +312,19 @@ fn crudo_desde(ev: &ical::parser::ical::component::IcalEvent, local: Tz) -> Crud
                 let u = desescapar(valor);
                 if !u.is_empty() {
                     c.ubicacion = Some(u);
+                }
+            }
+            "CATEGORIES" => {
+                for cat in separar_categorias(valor) {
+                    if !c.categorias.contains(&cat) {
+                        c.categorias.push(cat);
+                    }
+                }
+            }
+            "DESCRIPTION" => {
+                let d = desescapar(valor);
+                if !d.is_empty() {
+                    c.descripcion = Some(d.chars().take(MAX_DESCRIPCION).collect::<String>().trim_end().to_string());
                 }
             }
             "STATUS" => c.cancelado = valor.trim().eq_ignore_ascii_case("CANCELLED"),
@@ -312,14 +364,17 @@ fn normalizar_rrule(r: &str) -> String {
         .join(";")
 }
 
-/// Ocurrencias (inicio, fin) de un evento crudo que tocan la ventana.
+/// (inicio, fin, todo el día, instante UTC en segundos que identifica la ocurrencia).
+type Ocurrencia = (DateTime<Tz>, DateTime<Tz>, bool, i64);
+
+/// Ocurrencias de un evento crudo que tocan la ventana.
 fn ocurrencias(
     c: &Crudo,
     ini_v: DateTime<Tz>,
     fin_v: DateTime<Tz>,
     local: Tz,
     excepciones: &HashSet<(String, i64)>,
-) -> Vec<(DateTime<Tz>, DateTime<Tz>, bool)> {
+) -> Vec<Ocurrencia> {
     let Some(inicio) = c.inicio else { return vec![] };
     let todo_dia = matches!(inicio, Fecha::Dia(_));
 
@@ -341,15 +396,18 @@ fn ocurrencias(
         }
     };
 
-    let construir = |s: DateTime<Tz>| -> (DateTime<Tz>, DateTime<Tz>, bool) {
-        if todo_dia {
+    // Una excepción conserva el id de la ocurrencia que sustituye (su RECURRENCE-ID)
+    let id_excepcion = c.recurrence_id.map(|r| clave(r, local));
+    let construir = |s: DateTime<Tz>| -> Ocurrencia {
+        let (ini, fin, dia) = if todo_dia {
             let d = s.with_timezone(&local).date_naive();
             (medianoche(local, d), medianoche(local, d + Duration::days(dias)), true)
         } else {
             (s, s + dur, false)
-        }
+        };
+        (ini, fin, dia, id_excepcion.unwrap_or_else(|| ini.timestamp()))
     };
-    let toca = |(s, f, _): &(DateTime<Tz>, DateTime<Tz>, bool)| {
+    let toca = |(s, f, _, _): &Ocurrencia| {
         *s < fin_v && (*f > ini_v || *s >= ini_v)
     };
 
@@ -391,7 +449,13 @@ fn ocurrencias(
         .collect()
 }
 
-/// Interpreta un ICS y devuelve los eventos de `[hoy 00:00, hoy + 14 días)` en la zona
+/// Id estable de una ocurrencia: `uid|AAAAMMDDTHHMMSSZ` (inicio original en UTC).
+fn id_ocurrencia(uid: &str, instante: i64) -> String {
+    let t = Utc.timestamp_opt(instante, 0).single().unwrap_or_default();
+    format!("{uid}|{}", t.format("%Y%m%dT%H%M%SZ"))
+}
+
+/// Interpreta un ICS y devuelve los eventos de `[hoy 00:00, hoy + 183 días)` en la zona
 /// `local`, ordenados. Función pura: no toca red ni disco.
 pub fn interpretar(ics: &str, ahora: DateTime<Utc>, local: Tz) -> Result<Vec<Evento>, String> {
     let hoy = ahora.with_timezone(&local).date_naive();
@@ -417,13 +481,17 @@ pub fn interpretar(ics: &str, ahora: DateTime<Utc>, local: Tz) -> Result<Vec<Eve
 
     let mut eventos: Vec<Evento> = Vec::new();
     for c in crudos.iter().filter(|c| !c.cancelado) {
-        for (s, f, dia) in ocurrencias(c, ini_v, fin_v, local, &excepciones) {
+        for (s, f, dia, instante) in ocurrencias(c, ini_v, fin_v, local, &excepciones) {
             eventos.push(Evento {
+                id: id_ocurrencia(&c.uid, instante),
+                uid: c.uid.clone(),
                 titulo: c.titulo.clone(),
                 inicio: s.with_timezone(&local).fixed_offset(),
                 fin: f.with_timezone(&local).fixed_offset(),
                 todo_el_dia: dia,
                 ubicacion: c.ubicacion.clone(),
+                categorias: c.categorias.clone(),
+                descripcion: c.descripcion.clone(),
             });
         }
     }
@@ -551,6 +619,7 @@ pub fn sincronizar(app: &AppHandle) {
         let url = url.unwrap();
         let resultado = descargar(&url)
             .and_then(|t| interpretar(&t, Utc::now(), zona_local()));
+        let mut nuevos: Option<Vec<Evento>> = None;
         {
             let cal = app.state::<Calendario>();
             let mut est = cal.estado.lock().unwrap();
@@ -558,6 +627,7 @@ pub fn sincronizar(app: &AppHandle) {
             match resultado {
                 Ok(eventos) => {
                     let ahora = Utc::now();
+                    nuevos = Some(eventos.clone());
                     est.eventos = eventos.clone();
                     est.ultima_sync = Some(ahora);
                     est.error = None;
@@ -568,6 +638,10 @@ pub fn sincronizar(app: &AppHandle) {
             }
         }
         emitir(&app);
+        // Las cuentas atrás se ponen al día con los eventos recién leídos
+        if let Some(eventos) = nuevos {
+            crate::cuentas::reconciliar(&app, &eventos);
+        }
         // La URL cambió mientras se sincronizaba: se repite con la nueva
         if url_configurada(&app).as_deref() != Some(url.as_str()) {
             sincronizar(&app);
@@ -641,6 +715,11 @@ mod pruebas {
         e.inicio.format("%Y-%m-%d %H:%M").to_string()
     }
 
+    /// Los tests de recurrencias miran solo hasta el 30 de nov (la ventana antigua de 14 días).
+    fn hasta_30_nov(ev: Vec<Evento>) -> Vec<Evento> {
+        ev.into_iter().filter(|e| hora(e).as_str() < "2026-12-01").collect()
+    }
+
     #[test]
     fn evento_simple() {
         let s = ics(
@@ -673,7 +752,7 @@ mod pruebas {
         let s = ics(
             "BEGIN:VEVENT\r\nUID:w1\r\nSUMMARY:Semanal\r\nDTSTART;TZID=Europe/Madrid:20261103T090000\r\nDTEND;TZID=Europe/Madrid:20261103T093000\r\nRRULE:FREQ=WEEKLY;BYDAY=TU\r\nEXDATE;TZID=Europe/Madrid:20261124T090000\r\nEND:VEVENT\r\n",
         );
-        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        let ev = hasta_30_nov(interpretar(&s, ahora(), MADRID).unwrap());
         let horas: Vec<String> = ev.iter().map(hora).collect();
         assert_eq!(horas, vec!["2026-11-17 09:00"]);
     }
@@ -683,7 +762,7 @@ mod pruebas {
         let s = ics(
             "BEGIN:VEVENT\r\nUID:w2\r\nSUMMARY:Semanal\r\nDTSTART;TZID=Europe/Madrid:20261103T090000\r\nDTEND;TZID=Europe/Madrid:20261103T093000\r\nRRULE:FREQ=WEEKLY;BYDAY=TU\r\nEND:VEVENT\r\n",
         );
-        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        let ev = hasta_30_nov(interpretar(&s, ahora(), MADRID).unwrap());
         let horas: Vec<String> = ev.iter().map(hora).collect();
         assert_eq!(horas, vec!["2026-11-17 09:00", "2026-11-24 09:00"]);
     }
@@ -695,7 +774,7 @@ mod pruebas {
             "BEGIN:VEVENT\r\nUID:x1\r\nSUMMARY:Serie\r\nDTSTART;TZID=Europe/Madrid:20261103T090000\r\nDTEND;TZID=Europe/Madrid:20261103T100000\r\nRRULE:FREQ=WEEKLY;BYDAY=TU\r\nEND:VEVENT\r\n\
 BEGIN:VEVENT\r\nUID:x1\r\nSUMMARY:Serie (movida)\r\nRECURRENCE-ID;TZID=Europe/Madrid:20261124T090000\r\nDTSTART;TZID=Europe/Madrid:20261125T150000\r\nDTEND;TZID=Europe/Madrid:20261125T160000\r\nEND:VEVENT\r\n",
         );
-        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        let ev = hasta_30_nov(interpretar(&s, ahora(), MADRID).unwrap());
         let v: Vec<(String, String)> = ev.iter().map(|e| (hora(e), e.titulo.clone())).collect();
         assert_eq!(
             v,
@@ -740,10 +819,94 @@ BEGIN:VEVENT\r\nUID:c2\r\nSUMMARY:Vivo\r\nDTSTART:20261117T090000Z\r\nEND:VEVENT
 
     #[test]
     fn fuera_de_la_ventana_y_webcal() {
-        let s = ics("BEGIN:VEVENT\r\nUID:f1\r\nSUMMARY:Lejos\r\nDTSTART:20261201T080000Z\r\nEND:VEVENT\r\n");
+        let s = ics("BEGIN:VEVENT\r\nUID:f1\r\nSUMMARY:Lejos\r\nDTSTART:20270601T080000Z\r\nEND:VEVENT\r\n");
         assert!(interpretar(&s, ahora(), MADRID).unwrap().is_empty());
         assert_eq!(normalizar_url("webcal://ejemplo.invalid/a.ics"), "https://ejemplo.invalid/a.ics");
         assert!(interpretar("no es un ics", ahora(), MADRID).is_err());
+    }
+
+    #[test]
+    fn categorias_simples_y_multiples() {
+        let s = ics(
+            "BEGIN:VEVENT\r\nUID:k1\r\nSUMMARY:Clase\r\nCATEGORIES:Clase\r\nDTSTART:20261117T080000Z\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:k2\r\nSUMMARY:Entrega\r\nCATEGORIES:TFM,Entrega\r\nCATEGORIES:Urgente\r\nDTSTART:20261117T090000Z\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:k3\r\nSUMMARY:Escapada\r\nCATEGORIES:Casa\\, jardin,Otra\r\nDTSTART:20261117T100000Z\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:k4\r\nSUMMARY:Sin\r\nDTSTART:20261117T110000Z\r\nEND:VEVENT\r\n",
+        );
+        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        assert_eq!(ev[0].categorias, vec!["Clase"]);
+        assert_eq!(ev[1].categorias, vec!["TFM", "Entrega", "Urgente"]);
+        assert_eq!(ev[2].categorias, vec!["Casa, jardin", "Otra"]);
+        assert!(ev[3].categorias.is_empty());
+    }
+
+    #[test]
+    fn descripcion_sin_escapes_y_recortada() {
+        let larga = "a".repeat(300);
+        let s = ics(&format!(
+            "BEGIN:VEVENT\r\nUID:d9\r\nSUMMARY:Con texto\r\nDESCRIPTION:Linea uno\\nlinea\\, dos\r\nDTSTART:20261117T080000Z\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:d10\r\nSUMMARY:Larga\r\nDESCRIPTION:{larga}\r\nDTSTART:20261117T090000Z\r\nEND:VEVENT\r\n"
+        ));
+        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        assert_eq!(ev[0].descripcion.as_deref(), Some("Linea uno\nlinea, dos"));
+        assert_eq!(ev[1].descripcion.as_ref().unwrap().chars().count(), 200);
+    }
+
+    #[test]
+    fn id_estable_de_ocurrencia_recurrente() {
+        let serie = "BEGIN:VEVENT\r\nUID:r1\r\nSUMMARY:Semanal\r\nDTSTART;TZID=Europe/Madrid:20261103T090000\r\nDTEND;TZID=Europe/Madrid:20261103T093000\r\nRRULE:FREQ=WEEKLY;BYDAY=TU\r\n";
+        let a = interpretar(&ics(&format!("{serie}END:VEVENT\r\n")), ahora(), MADRID).unwrap();
+        // Otro «hoy» y otro título: la misma ocurrencia conserva el id
+        let serie2 = serie.replace("Semanal", "Renombrada");
+        let b = interpretar(
+            &ics(&format!("{serie2}END:VEVENT\r\n")),
+            ahora() + Duration::days(3),
+            MADRID,
+        )
+        .unwrap();
+        assert_eq!(a[0].id, "r1|20261117T080000Z");
+        assert_eq!(a[1].id, "r1|20261124T080000Z");
+        assert_eq!(a[1].uid, "r1");
+        let b24 = b.iter().find(|e| e.id == a[1].id).expect("misma ocurrencia");
+        assert_eq!(b24.titulo, "Renombrada");
+        let ids: HashSet<&String> = a.iter().map(|e| &e.id).collect();
+        assert_eq!(ids.len(), a.len());
+    }
+
+    #[test]
+    fn id_de_excepcion_movida_es_el_original() {
+        let s = ics(
+            "BEGIN:VEVENT\r\nUID:x1\r\nSUMMARY:Serie\r\nDTSTART;TZID=Europe/Madrid:20261103T090000\r\nDTEND;TZID=Europe/Madrid:20261103T100000\r\nRRULE:FREQ=WEEKLY;BYDAY=TU\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:x1\r\nSUMMARY:Serie (movida)\r\nRECURRENCE-ID;TZID=Europe/Madrid:20261124T090000\r\nDTSTART;TZID=Europe/Madrid:20261125T150000\r\nDTEND;TZID=Europe/Madrid:20261125T160000\r\nEND:VEVENT\r\n",
+        );
+        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        let movida = ev.iter().find(|e| e.titulo == "Serie (movida)").unwrap();
+        assert_eq!(hora(movida), "2026-11-25 15:00");
+        // El id sale del RECURRENCE-ID (24 nov 09:00 Madrid = 08:00 UTC), no del nuevo inicio
+        assert_eq!(movida.id, "x1|20261124T080000Z");
+    }
+
+    #[test]
+    fn ventana_de_seis_meses() {
+        // A 150 días (15 abr 2027) aparece; a 200 días (4 jun 2027), no
+        let s = ics(
+            "BEGIN:VEVENT\r\nUID:l1\r\nSUMMARY:Cerca\r\nDTSTART:20270415T080000Z\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:l2\r\nSUMMARY:Lejos\r\nDTSTART:20270604T080000Z\r\nEND:VEVENT\r\n",
+        );
+        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        assert_eq!(ev.len(), 1);
+        assert_eq!(ev[0].titulo, "Cerca");
+    }
+
+    #[test]
+    fn serie_diaria_larga_es_rapida_y_acotada() {
+        let s = ics(
+            "BEGIN:VEVENT\r\nUID:dd\r\nSUMMARY:Diario\r\nDTSTART;TZID=Europe/Madrid:20200106T090000\r\nDTEND;TZID=Europe/Madrid:20200106T093000\r\nRRULE:FREQ=DAILY\r\nEND:VEVENT\r\n",
+        );
+        let t = Instant::now();
+        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        assert_eq!(ev.len(), 183); // un evento por día de la ventana, ni uno más
+        assert!(t.elapsed() < Espera::from_secs(5));
     }
 
     #[test]

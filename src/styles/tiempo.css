@@ -153,3 +153,165 @@
   background: var(--cian);
   vertical-align: middle;
 }
+
+/* --- Agenda ampliada (v1.2): ocupa el resto de la pestaña y hace scroll propia --- */
+.contenido:has(> .tmp) { display: flex; flex-direction: column; overflow: hidden; }
+.tmp {
+  --cat-4: color-mix(in srgb, var(--primario) 55%, var(--secundario));
+  --cat-5: color-mix(in srgb, var(--secundario) 55%, var(--alerta));
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.tmp__reloj, .tmp > .marco--cian { flex: none; }
+.tmp__marco-agenda { flex: 1; min-height: 160px; display: flex; flex-direction: column; }
+.tmp__marco-agenda > .marco__cuerpo { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tmp__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: var(--esp-2);
+  scrollbar-width: thin;
+  scrollbar-color: var(--amarillo-tenue) transparent;
+}
+.tmp__scroll::-webkit-scrollbar { width: 3px; }
+.tmp__scroll::-webkit-scrollbar-thumb { background: var(--amarillo-tenue); }
+.tmp__scroll::-webkit-scrollbar-thumb:hover { background: var(--amarillo); }
+.tmp__hoy { letter-spacing: 0.16em; }
+.tmp__centinela {
+  min-height: 1px;
+  padding: var(--esp-2) 0;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: var(--texto-tenue);
+}
+.tmp__centinela:empty { padding: 0; }
+
+/* Separador de mes con banda HUD */
+.tmp__mes {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  margin: var(--esp-4) 0 var(--esp-1);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.22em;
+  color: var(--cian);
+}
+.tmp__mes::after {
+  content: "";
+  flex: 1;
+  height: 6px;
+  background: repeating-linear-gradient(-45deg, var(--cian-tenue) 0 3px, transparent 3px 7px);
+  border-top: 1px solid var(--cian-tenue);
+}
+.tmp__dia-grupo:first-child { margin-top: 0; }
+
+/* Eventos: título hasta 2 líneas, categoría y estrella */
+.tmp__ev-texto { flex: 1; }
+.tmp__ev-fila { display: flex; align-items: flex-start; gap: var(--esp-1); }
+.tmp__ev-t {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--tam-s);
+  color: var(--texto);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.tmp__ev-fila .tmp__marca { flex: none; margin-top: 2px; }
+.tmp__ev-cat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--cat);
+}
+.tmp__cuadrado { flex: none; width: 6px; height: 6px; background: var(--cat); display: inline-block; }
+
+.tmp__estrella {
+  flex: none;
+  align-self: flex-start;
+  padding: 0 2px;
+  font-size: 15px;
+  line-height: 1;
+  background: none;
+  border: 0;
+  color: var(--texto-tenue);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+.tmp__evento:hover .tmp__estrella, .tmp__estrella:focus-visible { opacity: 0.7; }
+.tmp__estrella:hover { opacity: 1; color: var(--amarillo); }
+.tmp__estrella--on {
+  opacity: 1;
+  color: var(--amarillo);
+  text-shadow: 0 0 8px var(--amarillo-tenue);
+}
+.tmp__estrella--pulso { animation: tmp-estrella 0.35s ease-out; }
+@keyframes tmp-estrella {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.7) rotate(18deg); }
+  100% { transform: scale(1); }
+}
+
+.tmp__evento--destello { animation: tmp-destello 1.2s ease-out; }
+@keyframes tmp-destello {
+  0%, 40% { background: var(--amarillo-suave); border-color: var(--amarillo); }
+  100% { background: transparent; }
+}
+
+/* Bloque CUENTAS ATRÁS */
+.tmp__cuentas {
+  margin-bottom: var(--esp-3);
+  padding: var(--esp-2);
+  border: 1px solid var(--amarillo-tenue);
+  background: var(--amarillo-suave);
+}
+.tmp__cuentas-cab {
+  margin-bottom: var(--esp-1);
+  font-family: var(--fuente-titulo);
+  font-size: 9px;
+  letter-spacing: 0.22em;
+  color: var(--amarillo);
+}
+.tmp__cuentas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 120px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--amarillo-tenue) transparent;
+}
+.tmp__cuenta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--esp-3);
+  width: 100%;
+  padding: 3px var(--esp-1);
+  text-align: left;
+  font: inherit;
+  color: var(--texto);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.tmp__cuenta:hover { background: var(--amarillo-suave); }
+.tmp__cuenta-texto { display: flex; flex-direction: column; min-width: 0; }
+.tmp__cuenta-titulo { font-size: var(--tam-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tmp__cuenta-tiempo {
+  flex: none;
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.08em;
+  color: var(--amarillo);
+  font-variant-numeric: tabular-nums;
+}

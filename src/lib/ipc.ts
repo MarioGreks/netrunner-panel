@@ -59,12 +59,18 @@ export interface MuestraSistema {
 export const muestraSistema = () => invoke<MuestraSistema>("muestra_sistema");
 
 export interface EventoCalendario {
+  /** Estable por ocurrencia: `uid|inicio UTC` */
+  id: string;
+  uid: string;
   titulo: string;
   /** RFC 3339 con el desfase de la zona local */
   inicio: string;
   fin: string;
   todo_el_dia: boolean;
   ubicacion: string | null;
+  categorias: string[];
+  /** Primeras ~200 letras de la descripción (aún no se muestra) */
+  descripcion: string | null;
 }
 
 export interface EstadoCalendario {
@@ -76,6 +82,21 @@ export interface EstadoCalendario {
 
 export const estadoCalendario = () => invoke<EstadoCalendario>("estado_calendario");
 export const sincronizarCalendario = () => invoke<void>("sincronizar_calendario");
+
+export interface CuentaAtras {
+  id_evento: string;
+  uid: string;
+  titulo: string;
+  /** RFC 3339 */
+  inicio: string;
+  categorias: string[];
+  /** ms UTC */
+  creada: number;
+}
+
+export const estadoCuentas = () => invoke<CuentaAtras[]>("estado_cuentas");
+export const marcarCuenta = (evento: EventoCalendario) => invoke<void>("marcar_cuenta", { evento });
+export const desmarcarCuenta = (idEvento: string) => invoke<void>("desmarcar_cuenta", { idEvento });
 
 export interface ActualMeteo {
   temperatura: number;
@@ -193,6 +214,7 @@ export type EventoPanel =
   | "tema://cambio"
   | "sistema://muestra"
   | "calendario://estado"
+  | "cuentas://estado"
   | "meteo://estado"
   | "notas://estado"
   | "musica://estado"

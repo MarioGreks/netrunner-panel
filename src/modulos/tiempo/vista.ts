@@ -1,10 +1,14 @@
 // Módulo TIEMPO: reloj, tiempo meteorológico (Open-Meteo) y agenda (ICS de Outlook).
 import {
   alEvento,
+  desmarcarCuenta,
   estadoCalendario,
+  estadoCuentas,
   estadoMeteo,
+  marcarCuenta,
   obtenerConfig,
   sincronizarCalendario,
+  type CuentaAtras,
   type EstadoCalendario,
   type EstadoMeteo,
   type EventoCalendario,
@@ -13,6 +17,10 @@ import { abrirAjustes } from "../../lib/navegacion";
 import { iconoMeteo } from "../../lib/iconos-meteo";
 
 const DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
+const MESES_LARGOS = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+/** La agenda cubre unos 6 meses (igual que `DIAS_VENTANA` en calendario.rs) y se pinta de 14 en 14 días. */
+const DIAS_AGENDA = 183;
+const TANDA = 14;
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
 const dos = (n: number) => String(n).padStart(2, "0");
 
@@ -35,6 +43,36 @@ const inicioDeDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDa
 const mismoDia = (a: Date, b: Date) => inicioDeDia(a).getTime() === inicioDeDia(b).getTime();
 const hhmm = (d: Date) => `${dos(d.getHours())}:${dos(d.getMinutes())}`;
 const redondear = (n: number) => `${Math.round(n)}°`;
+
+/** Colores de categoría: tres del tema y dos derivados (definidos en tiempo.css). */
+const PALETA_CATEGORIAS = ["var(--primario)", "var(--secundario)", "var(--alerta)", "var(--cat-4)", "var(--cat-5)"];
+
+/** Color determinista para un nombre de categoría: mismo nombre, mismo color (FNV-1a). */
+export function colorCategoria(nombre: string): string {
+  const n = nombre.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+  let h = 2166136261;
+  for (let i = 0; i < n.length; i++) {
+    h ^= n.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return PALETA_CATEGORIAS[h % PALETA_CATEGORIAS.length];
+}
+
+const subtituloCategoria = (cats: string[]) =>
+  cats.length
+    ? `<span class="tmp__ev-cat" style="--cat:${colorCategoria(cats[0])}"><i class="tmp__cuadrado"></i>${esc(cats.join(" · ").toUpperCase())}</span>`
+    : "";
+
+/** «23D 04H 12M»; sin días «04H 12M»; sin horas «12M». */
+function restante(ms: number): string {
+  const min = Math.max(0, Math.floor(ms / 60000));
+  const d = Math.floor(min / 1440);
+  const h = Math.floor((min % 1440) / 60);
+  const m = min % 60;
+  if (d > 0) return `${d}D ${dos(h)}H ${dos(m)}M`;
+  if (h > 0) return `${dos(h)}H ${dos(m)}M`;
+  return `${dos(m)}M`;
+}
 
 function hace(iso: string | null): string {
   if (!iso) return "SIN SINCRONIZAR";
@@ -60,7 +98,7 @@ interface Linea {
 /** Agrupa por día. Los eventos de día completo aparecen en cada día que cubren. */
 function agrupar(eventos: EventoCalendario[], ahora: Date): Map<number, Linea[]> {
   const hoy = inicioDeDia(ahora).getTime();
-  const limite = hoy + 14 * 86400000;
+  const limite = hoy + DIAS_AGENDA * 86400000;
   const grupos = new Map<number, Linea[]>();
   const meter = (dia: number, l: Linea) => {
     if (dia < hoy || dia >= limite) return;
@@ -94,9 +132,12 @@ export function montar(contenedor: HTMLElement): void {
       ${marco(
         "AGENDA",
         `<span class="marco__etiqueta" data-id="agenda-hace"></span>
+         <button class="tmp__sync tmp__hoy" data-id="hoy" type="button" title="Volver a hoy" hidden>HOY</button>
          <button class="tmp__sync" data-id="sync" type="button" title="Sincronizar ahora"><span class="tmp__giro" data-id="giro">⟳</span> SYNC</button>`,
-        "",
-        "",
+        `<div class="tmp__error" data-id="agenda-error" hidden></div>
+         <div class="tmp__cuentas" data-id="cuentas" hidden></div>
+         <div class="tmp__scroll" data-id="agenda-scroll"></div>`,
+        "tmp__marco-agenda",
         "agenda",
       )}
     </div>`;
@@ -107,7 +148,10 @@ export function montar(contenedor: HTMLElement): void {
   const fecha = q("fecha");
   const cuerpoMeteo = q("meteo-cuerpo");
   const meteoHace = q("meteo-hace");
-  const cuerpoAgenda = q("agenda-cuerpo");
+  const errorAgenda = q("agenda-error");
+  const cuentasEl = q("cuentas");
+  const scroll = q("agenda-scroll");
+  const botonHoy = q<HTMLButtonElement>("hoy");
   const agendaHace = q("agenda-hace");
   const giro = q("giro");
 
@@ -115,6 +159,22 @@ export function montar(contenedor: HTMLElement): void {
   let meteo: EstadoMeteo | null = null;
   let agenda: EstadoCalendario | null = null;
   let tieneUrl = false;
+  let cuentas: CuentaAtras[] = [];
+  let marcadas = new Set<string>();
+
+  // Estado del pintado por tandas
+  interface Entrada {
+    dia: number;
+    idx: number;
+    lineas: Linea[];
+  }
+  let entradas: Entrada[] = [];
+  let porId = new Map<string, EventoCalendario>();
+  let siguiente: Linea | null = null;
+  let ahoraPintado = new Date();
+  let diasPintados = TANDA;
+  let pintadas = 0;
+  let mesPrevio = 0;
 
   q("engranaje").addEventListener("click", () => abrirAjustes("calendario"));
 
@@ -172,45 +232,191 @@ export function montar(contenedor: HTMLElement): void {
   };
 
   // --- Agenda ---
+  const centinela = document.createElement("div");
+  centinela.className = "tmp__centinela";
+  const observador = new IntersectionObserver(
+    (es) => {
+      if (es.some((e) => e.isIntersecting)) ampliar();
+    },
+    { root: scroll, rootMargin: "0px 0px 240px 0px" },
+  );
+
+  const htmlEvento = (l: Linea): string => {
+    const ev = l.ev;
+    const ahora = ahoraPintado;
+    const enCurso = !ev.todo_el_dia && l.inicio <= ahora && ahora < l.fin;
+    const pasado = !ev.todo_el_dia && l.fin <= ahora && mismoDia(l.fin, ahora);
+    const futuro = l.inicio > ahora;
+    const clases = ["tmp__evento", enCurso ? "tmp__evento--curso" : "", pasado ? "tmp__evento--pasado" : ""].join(" ");
+    const marca = marcadas.has(ev.id);
+    const estrella =
+      futuro && ev.id
+        ? `<button class="tmp__estrella${marca ? " tmp__estrella--on" : ""}" type="button" data-evid="${esc(ev.id)}" aria-pressed="${marca}" title="${marca ? "Quitar la cuenta atrás" : "Cuenta atrás"}">★</button>`
+        : "";
+    return `
+      <div class="${clases}" data-evid="${esc(ev.id)}">
+        <span class="tmp__hora-ev">${ev.todo_el_dia ? "TODO EL DÍA" : hhmm(l.inicio)}</span>
+        <span class="tmp__ev-texto">
+          <span class="tmp__ev-fila"><span class="tmp__ev-t" title="${esc(ev.titulo)}">${esc(ev.titulo)}</span>${l === siguiente ? `<span class="tmp__marca">SIGUIENTE</span>` : ""}</span>
+          ${subtituloCategoria(ev.categorias ?? [])}
+          ${ev.ubicacion ? `<span class="tmp__ev-ubic">${esc(ev.ubicacion)}</span>` : ""}
+        </span>
+        ${estrella}
+      </div>`;
+  };
+
+  /** Pinta (sin borrar nada) las entradas aún no pintadas que caen dentro de `diasPintados`. */
+  const anexar = () => {
+    let html = "";
+    while (pintadas < entradas.length && entradas[pintadas].idx < diasPintados) {
+      const e = entradas[pintadas++];
+      const d = new Date(e.dia);
+      const mes = d.getFullYear() * 12 + d.getMonth();
+      if (mes !== mesPrevio) {
+        mesPrevio = mes;
+        html += `<div class="tmp__mes"><span>${MESES_LARGOS[d.getMonth()]} ${d.getFullYear()}</span></div>`;
+      }
+      html += `<div class="tmp__dia-grupo">${etiquetaDia(d, ahoraPintado)}</div>`;
+      html += e.lineas.map(htmlEvento).join("");
+    }
+    centinela.insertAdjacentHTML("beforebegin", html);
+    observador.unobserve(centinela);
+    if (diasPintados >= DIAS_AGENDA) {
+      centinela.textContent = "FIN DE LA AGENDA";
+    } else {
+      // Si el centinela sigue a la vista, volver a observarlo dispara otra tanda
+      observador.observe(centinela);
+    }
+  };
+
+  function ampliar() {
+    if (diasPintados >= DIAS_AGENDA) return;
+    diasPintados = Math.min(diasPintados + TANDA, DIAS_AGENDA);
+    anexar();
+  }
+
+  const actualizarBotonHoy = () => {
+    botonHoy.hidden = scroll.scrollTop < 60;
+  };
+
   const pintarAgenda = () => {
     const s = agenda;
     giro.classList.toggle("tmp__giro--activo", !!s?.sincronizando);
     agendaHace.textContent = tieneUrl || s?.ultima_sync ? hace(s?.ultima_sync ?? null) : "";
+    errorAgenda.hidden = !(tieneUrl && s?.error);
+    errorAgenda.textContent = tieneUrl && s?.error ? s.error : "";
+    observador.unobserve(centinela);
+    const antes = scroll.scrollTop;
+    scroll.replaceChildren();
+    entradas = [];
+    porId = new Map();
+    pintadas = 0;
     if (!tieneUrl) {
-      cuerpoAgenda.innerHTML = `<div class="tmp__vacio">SIN CALENDARIO CONFIGURADO<button class="tmp__btn" data-accion="calendario" type="button">CONFIGURAR</button></div>`;
+      scroll.innerHTML = `<div class="tmp__vacio">SIN CALENDARIO CONFIGURADO<button class="tmp__btn" data-accion="calendario" type="button">CONFIGURAR</button></div>`;
+      actualizarBotonHoy();
       return;
     }
-    let html = s?.error ? `<div class="tmp__error">${esc(s.error)}</div>` : "";
-    const ahora = new Date();
+    ahoraPintado = new Date();
+    const ahora = ahoraPintado;
+    const hoy = inicioDeDia(ahora).getTime();
     const grupos = agrupar(s?.eventos ?? [], ahora);
+    for (const ev of s?.eventos ?? []) if (ev.id) porId.set(ev.id, ev);
     if (grupos.size === 0) {
-      html += `<div class="tmp__vacio">${s?.sincronizando && !s.ultima_sync ? "SINCRONIZANDO…" : "SIN EVENTOS EN 14 DÍAS"}</div>`;
+      scroll.innerHTML = `<div class="tmp__vacio">${s?.sincronizando && !s.ultima_sync ? "SINCRONIZANDO…" : "SIN EVENTOS EN 6 MESES"}</div>`;
+      actualizarBotonHoy();
+      return;
     }
+    entradas = [...grupos].map(([dia, lineas]) => ({ dia, lineas, idx: Math.round((dia - hoy) / 86400000) }));
     // El siguiente evento con hora que aún no ha empezado
-    let siguiente: Linea | null = null;
+    siguiente = null;
     for (const lineas of grupos.values()) {
       for (const l of lineas) {
         if (!l.ev.todo_el_dia && l.inicio > ahora && (!siguiente || l.inicio < siguiente.inicio)) siguiente = l;
       }
     }
-    for (const [dia, lineas] of grupos) {
-      html += `<div class="tmp__dia-grupo">${etiquetaDia(new Date(dia), ahora)}</div>`;
-      for (const l of lineas) {
-        const enCurso = !l.ev.todo_el_dia && l.inicio <= ahora && ahora < l.fin;
-        const pasado = !l.ev.todo_el_dia && l.fin <= ahora && mismoDia(l.fin, ahora);
-        const clases = ["tmp__evento", enCurso ? "tmp__evento--curso" : "", pasado ? "tmp__evento--pasado" : ""].join(" ");
-        html += `
-          <div class="${clases}">
-            <span class="tmp__hora-ev">${l.ev.todo_el_dia ? "TODO EL DÍA" : hhmm(l.inicio)}</span>
-            <span class="tmp__ev-texto">
-              <span class="tmp__ev-titulo">${esc(l.ev.titulo)}${l === siguiente ? ` <span class="tmp__marca">SIGUIENTE</span>` : ""}</span>
-              ${l.ev.ubicacion ? `<span class="tmp__ev-ubic">${esc(l.ev.ubicacion)}</span>` : ""}
-            </span>
-          </div>`;
-      }
-    }
-    cuerpoAgenda.innerHTML = html;
+    mesPrevio = ahora.getFullYear() * 12 + ahora.getMonth();
+    centinela.textContent = "";
+    scroll.append(centinela);
+    anexar();
+    scroll.scrollTop = antes;
+    actualizarBotonHoy();
   };
+
+  // --- Cuentas atrás ---
+  const pintarCuentas = () => {
+    const ahora = Date.now();
+    const lista = cuentas.filter((c) => new Date(c.inicio).getTime() > ahora);
+    cuentasEl.hidden = lista.length === 0;
+    if (lista.length === 0) {
+      cuentasEl.replaceChildren();
+      return;
+    }
+    cuentasEl.innerHTML = `
+      <div class="tmp__cuentas-cab">CUENTAS ATRÁS</div>
+      <div class="tmp__cuentas-lista">${lista
+        .map(
+          (c) => `<button class="tmp__cuenta" type="button" data-evid="${esc(c.id_evento)}" title="${esc(c.titulo)}">
+            <span class="tmp__cuenta-texto">
+              <span class="tmp__cuenta-titulo">${esc(c.titulo)}</span>
+              ${subtituloCategoria(c.categorias ?? [])}
+            </span>
+            <span class="tmp__cuenta-tiempo">${restante(new Date(c.inicio).getTime() - ahora)}</span>
+          </button>`,
+        )
+        .join("")}</div>`;
+  };
+
+  /** Refleja `marcadas` en las estrellas ya pintadas, sin repintar la agenda. */
+  const actualizarEstrellas = () => {
+    scroll.querySelectorAll<HTMLElement>(".tmp__estrella").forEach((b) => {
+      const on = marcadas.has(b.dataset.evid ?? "");
+      b.classList.toggle("tmp__estrella--on", on);
+      b.setAttribute("aria-pressed", String(on));
+      b.title = on ? "Quitar la cuenta atrás" : "Cuenta atrás";
+    });
+  };
+
+  /** Hace scroll hasta el evento, pintando antes las tandas que falten. */
+  const irAEvento = (id: string) => {
+    const entrada = entradas.find((e) => e.lineas.some((l) => l.ev.id === id));
+    if (!entrada) return;
+    if (entrada.idx >= diasPintados) {
+      diasPintados = Math.min(DIAS_AGENDA, Math.ceil((entrada.idx + 1) / TANDA) * TANDA);
+      anexar();
+    }
+    const el = [...scroll.querySelectorAll<HTMLElement>(".tmp__evento")].find((x) => x.dataset.evid === id);
+    if (!el) return;
+    const top = scroll.scrollTop + el.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 24;
+    scroll.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+    el.classList.remove("tmp__evento--destello");
+    void el.offsetWidth;
+    el.classList.add("tmp__evento--destello");
+    el.addEventListener("animationend", () => el.classList.remove("tmp__evento--destello"), { once: true });
+  };
+
+  cuentasEl.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>(".tmp__cuenta");
+    if (b?.dataset.evid) irAEvento(b.dataset.evid);
+  });
+  scroll.addEventListener("scroll", actualizarBotonHoy, { passive: true });
+  botonHoy.addEventListener("click", () => scroll.scrollTo({ top: 0, behavior: "smooth" }));
+  scroll.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>(".tmp__estrella");
+    const id = b?.dataset.evid;
+    const ev = id ? porId.get(id) : undefined;
+    if (!b || !id || !ev) return;
+    const estabaOn = marcadas.has(id);
+    if (estabaOn) marcadas.delete(id);
+    else marcadas.add(id);
+    actualizarEstrellas();
+    b.classList.remove("tmp__estrella--pulso");
+    void b.offsetWidth;
+    b.classList.add("tmp__estrella--pulso");
+    (estabaOn ? desmarcarCuenta(id) : marcarCuenta(ev)).catch(() => {
+      marcadas = new Set(cuentas.map((c) => c.id_evento));
+      actualizarEstrellas();
+    });
+  });
 
   // Los botones «CONFIGURAR» de los marcos vacíos llevan a su sección de AJUSTES
   contenedor.addEventListener("click", (e) => {
@@ -230,6 +436,7 @@ export function montar(contenedor: HTMLElement): void {
     if (!vivo) return;
     vivo = false;
     clearInterval(intervalo);
+    observador.disconnect();
     suscripciones.forEach((u) => u());
   };
   const comprobar = () => {
@@ -250,6 +457,13 @@ export function montar(contenedor: HTMLElement): void {
     agenda = s;
     pintarAgenda();
   };
+  const recibirCuentas = (c: CuentaAtras[]) => {
+    if (!comprobar()) return;
+    cuentas = c;
+    marcadas = new Set(c.map((x) => x.id_evento));
+    pintarCuentas();
+    actualizarEstrellas();
+  };
   const recibirMeteo = (m: EstadoMeteo) => {
     if (!comprobar()) return;
     meteo = m;
@@ -269,6 +483,7 @@ export function montar(contenedor: HTMLElement): void {
 
   pintarReloj();
   pintarAgenda();
+  pintarCuentas();
   pintarMeteo();
   intervalo = window.setInterval(() => {
     if (!comprobar()) return;
@@ -276,6 +491,7 @@ export function montar(contenedor: HTMLElement): void {
     // La agenda y los «hace X min» se refrescan al cambiar el minuto
     if (new Date().getSeconds() === 0) {
       pintarAgenda();
+      pintarCuentas();
       pintarMeteo();
     }
   }, 1000);
@@ -285,15 +501,21 @@ export function montar(contenedor: HTMLElement): void {
     void leerConfig().then(() => recibirAgenda(s));
   }));
   suscribir(alEvento<EstadoMeteo>("meteo://estado", recibirMeteo));
+  suscribir(alEvento<CuentaAtras[]>("cuentas://estado", recibirCuentas));
   suscribir(alEvento("panel://mostrar", () => {
     if (!vivo) return;
+    // Al volver a abrir el panel, la agenda empieza de nuevo por HOY
+    diasPintados = TANDA;
+    scroll.scrollTop = 0;
     pintarReloj();
     pintarAgenda();
+    pintarCuentas();
     pintarMeteo();
   }));
 
   void leerConfig().then(() => {
     estadoCalendario().then(recibirAgenda).catch(() => {});
     estadoMeteo().then(recibirMeteo).catch(() => {});
+    estadoCuentas().then(recibirCuentas).catch(() => {});
   });
 }

@@ -1,6 +1,7 @@
 mod accesos;
 mod calendario;
 mod config;
+mod cuentas;
 mod estado;
 mod meteo;
 mod musica;
@@ -33,6 +34,9 @@ pub fn run() {
             sistema::muestra_sistema,
             calendario::estado_calendario,
             calendario::sincronizar_calendario,
+            cuentas::estado_cuentas,
+            cuentas::marcar_cuenta,
+            cuentas::desmarcar_cuenta,
             meteo::estado_meteo,
             meteo::buscar_ciudad,
             notas::estado_notas,
@@ -61,6 +65,7 @@ pub fn run() {
             // Siempre arranca solo con la pestaña (con o sin --oculto)
             ventanas::preparar(&handle);
             sistema::iniciar(&handle);
+            cuentas::iniciar(&handle);
             calendario::iniciar(&handle);
             meteo::iniciar(&handle);
             notas::iniciar(&handle);

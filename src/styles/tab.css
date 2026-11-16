@@ -1,0 +1,14 @@
+.pestana-body { background: transparent; }
+.tira {
+  position: fixed;
+  inset: 0;
+  background: var(--amarillo);
+  cursor: pointer;
+  box-shadow: 0 0 10px var(--amarillo), 0 0 22px var(--amarillo-tenue);
+  animation: pulso 2.4s ease-in-out infinite;
+}
+@keyframes pulso {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+.tira:hover { animation-play-state: paused; opacity: 1; }

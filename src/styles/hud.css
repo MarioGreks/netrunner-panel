@@ -1,0 +1,72 @@
+/* Marco con esquinas cortadas: clip-path recorta también los bordes reales, así que el
+   borde de 1 px se simula con un fondo de color recortado y un pseudo-elemento
+   interior (también recortado) que lo deja asomar. */
+.marco {
+  --color-marco: var(--amarillo);
+  position: relative;
+  padding: var(--esp-4);
+  background: var(--color-marco);
+  clip-path: polygon(
+    var(--corte) 0, 100% 0, 100% calc(100% - var(--corte)),
+    calc(100% - var(--corte)) 100%, 0 100%, 0 var(--corte)
+  );
+  isolation: isolate;
+}
+.marco::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  background: var(--fondo);
+  clip-path: polygon(
+    calc(var(--corte) - 0.5px) 0, 100% 0, 100% calc(100% - var(--corte) + 0.5px),
+    calc(100% - var(--corte) + 0.5px) 100%, 0 100%, 0 calc(var(--corte) - 0.5px)
+  );
+}
+.marco--cian { --color-marco: var(--cian); }
+
+.marco__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--esp-3);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-s);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--amarillo);
+}
+.marco--cian .marco__cabecera { color: var(--cian); }
+.marco__etiqueta {
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-xs);
+  color: var(--texto-tenue);
+}
+
+.marco__cuerpo { color: var(--texto); }
+.marco__vacio {
+  letter-spacing: 0.2em;
+  color: var(--amarillo-tenue);
+}
+
+/* Separador de bandas diagonales amarillas/negras */
+.banda {
+  height: 6px;
+  flex: none;
+  background: repeating-linear-gradient(
+    -45deg, var(--amarillo) 0 6px, #000 6px 12px
+  );
+  opacity: 0.8;
+}
+
+/* Scanline sutil opcional: añadir la clase a cualquier contenedor */
+.scanline { position: relative; }
+.scanline::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px
+  );
+}

@@ -23,11 +23,23 @@ impl Default for Borde {
     }
 }
 
+/// Ciudad elegida para el tiempo meteorológico.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Ciudad {
+    pub nombre: String,
+    pub pais: String,
+    pub latitud: f64,
+    pub longitud: f64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
     pub edge: Borde,
     pub autostart: bool,
+    /// URL ICS del calendario. Es privada: nunca debe ir a logs ni a mensajes de error.
+    pub ics_url: Option<String>,
+    pub ciudad: Option<Ciudad>,
 }
 
 impl Default for Config {
@@ -35,6 +47,8 @@ impl Default for Config {
         Config {
             edge: Borde::Right,
             autostart: true,
+            ics_url: None,
+            ciudad: None,
         }
     }
 }
@@ -79,10 +93,16 @@ pub fn get_config(estado: State<Estado>) -> Config {
 #[tauri::command]
 pub fn set_config(app: AppHandle, estado: State<Estado>, config: Config) -> Result<(), String> {
     guardar(&app, &config)?;
-    *estado.config.lock().unwrap() = config.clone();
+    let anterior = std::mem::replace(&mut *estado.config.lock().unwrap(), config.clone());
     sincronizar_autoarranque(&app, config.autostart);
     ventanas::reposicionar(&app);
     let _ = app.emit("config://cambio", config.edge);
+    if anterior.ics_url != config.ics_url {
+        crate::calendario::sincronizar(&app);
+    }
+    if anterior.ciudad != config.ciudad {
+        crate::meteo::actualizar(&app);
+    }
     Ok(())
 }
 
@@ -96,6 +116,7 @@ mod pruebas {
         assert_eq!(c, Config::default());
         assert_eq!(c.edge, Borde::Right);
         assert!(c.autostart);
+        assert!(c.ics_url.is_none() && c.ciudad.is_none());
     }
 
     #[test]

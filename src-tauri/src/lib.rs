@@ -1,5 +1,7 @@
+mod calendario;
 mod config;
 mod estado;
+mod meteo;
 mod sistema;
 mod ventanas;
 
@@ -24,6 +26,10 @@ pub fn run() {
             ventanas::alternar_panel,
             ventanas::ocultar_panel,
             sistema::muestra_sistema,
+            calendario::estado_calendario,
+            calendario::sincronizar_calendario,
+            meteo::estado_meteo,
+            meteo::buscar_ciudad,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -33,6 +39,8 @@ pub fn run() {
             // Siempre arranca solo con la pestaña (con o sin --oculto)
             ventanas::preparar(&handle);
             sistema::iniciar(&handle);
+            calendario::iniciar(&handle);
+            meteo::iniciar(&handle);
             ventanas::iniciar_deteccion(handle);
             Ok(())
         })

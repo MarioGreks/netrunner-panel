@@ -92,33 +92,40 @@ botonAjustes.addEventListener("click", () => {
 });
 alAbrirAjustes(abrirVistaAjustes);
 
-// --- Animación de entrada (~400 ms): escaneo, glitch del título y marcos escalonados ---
+// --- Animación «holograma»: entrada (~550 ms) y apagado tipo CRT (~380 ms) ---
 const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)");
+const DURACION_ENTRADA = 550;
+const DURACION_SALIDA = 380;
+const DURACION_FUNDIDO = 150;
 let temporizadorEntrada: number | undefined;
+let temporizadorSalida: number | undefined;
+let temporizadorVuelta: number | undefined;
 
 const iniciarEntrada = () => {
   clearTimeout(temporizadorEntrada);
   panel.classList.remove("entrando");
-  if (movimientoReducido.matches) return;
-  contenido.querySelectorAll<HTMLElement>(".marco").forEach((m, i) => m.style.setProperty("--i", String(Math.min(i, 8) + 2)));
   void panel.offsetWidth; // reinicia las animaciones CSS
   panel.classList.add("entrando");
-  temporizadorEntrada = window.setTimeout(() => panel.classList.remove("entrando"), 450);
+  temporizadorEntrada = window.setTimeout(
+    () => panel.classList.remove("entrando"),
+    (movimientoReducido.matches ? DURACION_FUNDIDO : DURACION_ENTRADA) + 20,
+  );
 };
-
-let temporizadorSalida: number | undefined;
 
 alEvento("panel://mostrar", () => {
   clearTimeout(temporizadorSalida);
-  // Si estaba saliendo (el cursor volvió durante el cierre), solo se revierte la
-  // salida: sin escaneo, glitch ni escalonado otra vez.
-  const cancelaCierre = panel.classList.contains("saliendo");
-  panel.classList.remove("saliendo");
-  if (cancelaCierre) {
-    panel.classList.remove("oculto");
+  // Si estaba saliendo (el cursor volvió durante el cierre), el panel vuelve a verse
+  // sin repetir el parpadeo de entrada.
+  if (panel.classList.contains("saliendo")) {
+    panel.classList.remove("saliendo", "oculto");
+    clearTimeout(temporizadorVuelta);
+    void panel.offsetWidth;
+    panel.classList.add("vuelve");
+    temporizadorVuelta = window.setTimeout(() => panel.classList.remove("vuelve"), 160);
     return;
   }
   // Un fotograma con el estado oculto antes de animar la entrada
+  panel.classList.add("oculto");
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
       panel.classList.remove("oculto");
@@ -130,13 +137,23 @@ alEvento("panel://mostrar", () => {
 alEvento("panel://ocultar", () => {
   if (bloqueo.dialogoAbierto) return; // selector de carpetas abierto
   clearTimeout(temporizadorEntrada);
-  panel.classList.remove("entrando");
-  panel.classList.add("saliendo", "oculto");
+  clearTimeout(temporizadorVuelta);
+  panel.classList.remove("entrando", "vuelve", "oculto");
+  void panel.offsetWidth;
+  panel.classList.add("saliendo");
   clearTimeout(temporizadorSalida);
-  temporizadorSalida = window.setTimeout(() => {
-    void ocultarPanel();
-  }, 230); // un poco más que la transición de salida (220 ms)
+  temporizadorSalida = window.setTimeout(
+    () => {
+      // Se deja oculto antes de esconder la ventana para que no quede un destello
+      panel.classList.add("oculto");
+      panel.classList.remove("saliendo");
+      void ocultarPanel();
+    },
+    (movimientoReducido.matches ? DURACION_FUNDIDO : DURACION_SALIDA) + 10,
+  );
 });
+
+alEvento("panel://ajustes", () => abrirVistaAjustes());
 
 alEvento<Borde>("config://cambio", aplicarBorde);
 

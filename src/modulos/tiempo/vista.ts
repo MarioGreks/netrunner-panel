@@ -15,6 +15,7 @@ import {
 } from "../../lib/ipc";
 import { abrirAjustes } from "../../lib/navegacion";
 import { iconoMeteo } from "../../lib/iconos-meteo";
+import { colorCategoria } from "../../lib/categorias";
 
 const DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 const MESES_LARGOS = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
@@ -43,20 +44,6 @@ const inicioDeDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDa
 const mismoDia = (a: Date, b: Date) => inicioDeDia(a).getTime() === inicioDeDia(b).getTime();
 const hhmm = (d: Date) => `${dos(d.getHours())}:${dos(d.getMinutes())}`;
 const redondear = (n: number) => `${Math.round(n)}°`;
-
-/** Colores de categoría: tres del tema y dos derivados (definidos en tiempo.css). */
-const PALETA_CATEGORIAS = ["var(--primario)", "var(--secundario)", "var(--alerta)", "var(--cat-4)", "var(--cat-5)"];
-
-/** Color determinista para un nombre de categoría: mismo nombre, mismo color (FNV-1a). */
-export function colorCategoria(nombre: string): string {
-  const n = nombre.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
-  let h = 2166136261;
-  for (let i = 0; i < n.length; i++) {
-    h ^= n.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return PALETA_CATEGORIAS[h % PALETA_CATEGORIAS.length];
-}
 
 const subtituloCategoria = (cats: string[]) =>
   cats.length

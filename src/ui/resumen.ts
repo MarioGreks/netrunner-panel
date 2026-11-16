@@ -18,7 +18,7 @@ const esc = (t: string) =>
 const recortar = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
 
 /** Evento en curso o, si no hay, el siguiente con hora; si no, uno de día completo de hoy. */
-function proximo(eventos: EventoCalendario[], ahora: Date): EventoCalendario | null {
+export function proximo(eventos: EventoCalendario[], ahora: Date): EventoCalendario | null {
   const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate()).getTime();
   const finHoy = inicioHoy + 86400000;
   let mejor: EventoCalendario | null = null;

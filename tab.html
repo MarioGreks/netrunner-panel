@@ -3,10 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Pestaña</title>
+    <title>Netrunner Panel · mini</title>
   </head>
   <body class="pestana-body">
-    <div id="tira" class="tira"></div>
+    <div id="mini" class="mini" title="Abrir panel">
+      <div class="mini__in">
+        <div class="mini__fila">
+          <div class="mini__reloj"><span id="hm">--:--</span><span id="seg" class="mini__seg">--</span></div>
+          <div id="meteo" class="mini__meteo"></div>
+        </div>
+        <div class="mini__fecha">
+          <span id="fecha">--- -- ---</span>
+          <span class="mini__etiqueta">SYS//CLK</span>
+        </div>
+        <div id="prox" class="mini__prox"><i id="prox-cat" class="mini__cuadrado"></i><span id="prox-texto">SIN EVENTOS</span></div>
+        <div id="cuenta" class="mini__cuenta" hidden>
+          <span id="cuenta-titulo" class="mini__cuenta-titulo"></span>
+          <span id="cuenta-valor" class="mini__cuenta-valor"></span>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/tab.ts"></script>
   </body>
 </html>

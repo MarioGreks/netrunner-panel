@@ -1,4 +1,5 @@
 mod accesos;
+mod bandeja;
 mod calendario;
 mod config;
 mod cuentas;
@@ -71,6 +72,7 @@ pub fn run() {
             notas::iniciar(&handle);
             musica::iniciar(&handle);
             accesos::iniciar(&handle);
+            bandeja::crear(&handle)?;
             ventanas::iniciar_deteccion(handle);
             Ok(())
         })

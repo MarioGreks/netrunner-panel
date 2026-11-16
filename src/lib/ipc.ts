@@ -23,6 +23,8 @@ export interface Config {
   tema: string;
   /** Opacidad del fondo del panel, entre 0.55 y 1. */
   opacidad: number;
+  /** Con true el borde de la pantalla no abre el panel (menú de la bandeja). */
+  borde_pausado: boolean;
 }
 
 export const obtenerConfig = () => invoke<Config>("get_config");
@@ -210,6 +212,7 @@ export const abrirAcceso = (id: string) => invoke<void>("abrir_acceso", { id });
 export type EventoPanel =
   | "panel://mostrar"
   | "panel://ocultar"
+  | "panel://ajustes"
   | "config://cambio"
   | "tema://cambio"
   | "sistema://muestra"

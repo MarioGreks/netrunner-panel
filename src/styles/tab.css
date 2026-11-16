@@ -1,32 +1,165 @@
+/* Miniventana del borde (220×96): módulo HUD con marco de esquinas cortadas.
+   El lado pegado al borde de la pantalla no lleva marco. Su fondo es siempre --panel
+   opaco al 92 %, sin depender de la transparencia que se elija para el panel. */
 .pestana-body { background: transparent; }
-.tira {
+
+.mini {
+  --corte-mini: 10px;
+  --corte-mini-in: 9.6px;
   position: fixed;
   inset: 0;
-  background: var(--primario);
+  background: var(--primario-tenue);
   cursor: pointer;
-  box-shadow: 0 0 10px var(--primario), 0 0 22px var(--primario-tenue);
-  animation: pulso 2.4s ease-in-out infinite;
+  transition: background 150ms linear;
 }
-/* Marcas de escala a lo largo de la tira: verticales en los lados, horizontales arriba */
-.tira::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(to bottom, transparent 0 8px, var(--fondo-trama) 8px 10px);
+.mini:hover { background: var(--primario); }
+.mini__in {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  height: 100%;
+  padding: 5px 10px 6px;
+  background: rgba(var(--fondo-panel-rgb), 0.92);
+  overflow: hidden;
 }
-/* Esquinas cortadas en el lado interior (el opuesto al borde de pantalla) */
-html[data-borde="right"] .tira { clip-path: polygon(4px 0, 100% 0, 100% 100%, 4px 100%, 0 calc(100% - 4px), 0 4px); }
-html[data-borde="left"] .tira { clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%); }
-html[data-borde="top"] .tira { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 3px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 3px)); }
-html[data-borde="top"] .tira::after {
-  background: repeating-linear-gradient(to right, transparent 0 8px, var(--fondo-trama) 8px 10px);
+
+/* Marco por borde: el lado del borde queda sin línea ni esquinas cortadas */
+html[data-borde="right"] .mini { padding: 1px 0 1px 1px; clip-path: polygon(var(--corte-mini) 0, 100% 0, 100% 100%, var(--corte-mini) 100%, 0 calc(100% - var(--corte-mini)), 0 var(--corte-mini)); }
+html[data-borde="right"] .mini__in { clip-path: polygon(var(--corte-mini-in) 0, 100% 0, 100% 100%, var(--corte-mini-in) 100%, 0 calc(100% - var(--corte-mini-in)), 0 var(--corte-mini-in)); }
+html[data-borde="left"] .mini { padding: 1px 1px 1px 0; clip-path: polygon(0 0, calc(100% - var(--corte-mini)) 0, 100% var(--corte-mini), 100% calc(100% - var(--corte-mini)), calc(100% - var(--corte-mini)) 100%, 0 100%); }
+html[data-borde="left"] .mini__in { clip-path: polygon(0 0, calc(100% - var(--corte-mini-in)) 0, 100% var(--corte-mini-in), 100% calc(100% - var(--corte-mini-in)), calc(100% - var(--corte-mini-in)) 100%, 0 100%); }
+html[data-borde="top"] .mini { padding: 0 1px 1px 1px; clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--corte-mini)), calc(100% - var(--corte-mini)) 100%, var(--corte-mini) 100%, 0 calc(100% - var(--corte-mini))); }
+html[data-borde="top"] .mini__in { clip-path: polygon(0 0, 100% 0, 100% calc(100% - var(--corte-mini-in)), calc(100% - var(--corte-mini-in)) 100%, var(--corte-mini-in) 100%, 0 calc(100% - var(--corte-mini-in))); }
+
+/* Fila superior: hora grande con segundos pequeños, y el tiempo a la derecha */
+.mini__fila {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 26px;
 }
-@keyframes pulso {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 1; }
+.mini__reloj {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--primario);
+  text-shadow: 0 0 8px var(--primario-tenue);
 }
-.tira:hover { animation-play-state: paused; opacity: 1; }
+.mini__seg {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--secundario);
+  text-shadow: none;
+}
+.mini__meteo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--secundario);
+}
+.mini__meteo:empty { display: none; }
+
+/* Micro-texto con la fecha y una etiqueta de módulo */
+.mini__fecha {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 10px;
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: var(--texto-tenue);
+}
+.mini__etiqueta { color: var(--primario-tenue); }
+
+/* Próximo evento */
+.mini__prox {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 14px;
+  margin-top: 1px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--secundario);
+  white-space: nowrap;
+  min-width: 0;
+}
+.mini__prox > span { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.mini__cuadrado {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--cat, var(--secundario));
+  box-shadow: 0 0 5px var(--cat, var(--secundario));
+}
+.mini__prox--alerta { color: var(--alerta); animation: mini-pulso 1.6s ease-in-out infinite; }
+.mini__prox--alerta .mini__cuadrado { background: var(--alerta); box-shadow: 0 0 5px var(--alerta); }
+.mini__prox--vacio { color: var(--texto-tenue); }
+.mini__prox--vacio .mini__cuadrado { display: none; }
+@keyframes mini-pulso {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Sin cuenta atrás, el próximo evento ocupa el espacio de abajo en grande */
+.mini__prox--grande {
+  flex: 1;
+  height: auto;
+  margin-top: 0;
+  border-top: 1px solid var(--primario-suave);
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+.mini__prox--grande .mini__cuadrado { width: 8px; height: 8px; }
+.mini__prox--grande.mini__prox--vacio { font-size: 11px; letter-spacing: 0.16em; }
+
+/* Cuenta atrás más cercana */
+.mini__cuenta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  min-height: 0;
+  border-top: 1px solid var(--primario-suave);
+}
+.mini__cuenta[hidden] { display: none; }
+.mini__cuenta-titulo {
+  font-size: 8px;
+  line-height: 1;
+  letter-spacing: 0.16em;
+  color: var(--texto-tenue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mini__cuenta-valor {
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+  color: var(--primario);
+  text-shadow: 0 0 8px var(--primario-tenue), 0 0 2px var(--primario);
+  white-space: nowrap;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .tira { animation: none; opacity: 0.85; }
+  .mini { transition: none; }
+  .mini__prox--alerta { animation: none; }
 }

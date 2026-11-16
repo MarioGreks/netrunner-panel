@@ -15,7 +15,8 @@ use crate::estado::Estado;
 
 const ANCHO_PANEL: f64 = 420.0;
 const PANEL_SUPERIOR: (f64, f64) = (760.0, 480.0);
-const PESTANA: (f64, f64) = (8.0, 140.0);
+/// Miniventana del borde (ancho, alto) en píxeles lógicos.
+const MINI: (f64, f64) = (220.0, 96.0);
 const MARGEN_BORDE: f64 = 2.0;
 /// Fracción central del borde que abre el panel (0.6 = el 60 % del medio).
 const ZONA_CENTRAL: f64 = 0.6;
@@ -51,7 +52,7 @@ fn calcular(app: &AppHandle, borde: Borde) -> Option<Geometria> {
     let (panel, pestana) = match borde {
         Borde::Right | Borde::Left => {
             let pw = fisico(ANCHO_PANEL);
-            let (tw, th) = (fisico(PESTANA.0), fisico(PESTANA.1));
+            let (tw, th) = (fisico(MINI.0), fisico(MINI.1));
             let x = if borde == Borde::Right { ax + aw - pw as i32 } else { ax };
             let tx = if borde == Borde::Right { ax + aw - tw as i32 } else { ax };
             (
@@ -64,8 +65,8 @@ fn calcular(app: &AppHandle, borde: Borde) -> Option<Geometria> {
         }
         Borde::Top => {
             let (pw, ph) = (fisico(PANEL_SUPERIOR.0), fisico(PANEL_SUPERIOR.1));
-            // En el borde superior la pestaña es la fina girada: 140×8
-            let (tw, th) = (fisico(PESTANA.1), fisico(PESTANA.0));
+            // Arriba la miniventana va centrada y pegada al borde superior
+            let (tw, th) = (fisico(MINI.0), fisico(MINI.1));
             (
                 (PhysicalPosition::new(ax + (aw - pw as i32) / 2, ay), PhysicalSize::new(pw, ph)),
                 (
@@ -99,7 +100,7 @@ pub fn reposicionar(app: &AppHandle) {
     }
 }
 
-/// Estado inicial: pestaña visible, panel oculto (nunca se muestra el panel al arrancar).
+/// Estado inicial: miniventana visible, panel oculto (nunca se muestra el panel al arrancar).
 pub fn preparar(app: &AppHandle) {
     reposicionar(app);
     if let Some(t) = app.get_webview_window("tab") {
@@ -121,7 +122,7 @@ pub fn mostrar_panel(app: &AppHandle) {
         let _ = p.show();
         let _ = p.set_focus();
     }
-    // La pestaña se esconde mientras el panel está abierto
+    // La miniventana se esconde mientras el panel está abierto
     if let Some(t) = app.get_webview_window("tab") {
         let _ = t.hide();
     }
@@ -233,13 +234,15 @@ pub fn iniciar_deteccion(app: AppHandle) {
             }
 
             let dentro = en_zona_de_borde(&g, borde, c.x, c.y);
+            let pausado = estado.config.lock().unwrap().borde_pausado;
 
             if !dentro {
                 armado = true;
                 desde = None;
                 continue;
             }
-            if estado.panel_visible.load(Ordering::SeqCst) || !armado {
+            // Con la apertura por borde en pausa no se abre (el cierre sigue funcionando)
+            if estado.panel_visible.load(Ordering::SeqCst) || !armado || pausado {
                 desde = None;
                 continue;
             }

@@ -46,6 +46,8 @@ pub struct Config {
     pub tema: String,
     /// Opacidad del fondo del panel, limitada a [OPACIDAD_MIN, OPACIDAD_MAX].
     pub opacidad: f64,
+    /// Con `true` el borde de la pantalla no abre el panel (se activa desde la bandeja).
+    pub borde_pausado: bool,
 }
 
 pub const OPACIDAD_MIN: f64 = 0.55;
@@ -62,6 +64,7 @@ impl Default for Config {
             carpeta_sync: None,
             tema: "netrunner".to_string(),
             opacidad: OPACIDAD_DEFECTO,
+            borde_pausado: false,
         }
     }
 }
@@ -100,6 +103,14 @@ fn guardar(app: &AppHandle, config: &Config) -> Result<(), String> {
     }
     let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
     std::fs::write(r, json).map_err(|e| e.to_string())
+}
+
+/// Cambia solo `borde_pausado` (lo usa el menú de la bandeja) y lo guarda.
+pub fn fijar_pausa(app: &AppHandle, pausado: bool) {
+    let estado = app.state::<Estado>();
+    let mut c = estado.config.lock().unwrap();
+    c.borde_pausado = pausado;
+    let _ = guardar(app, &c);
 }
 
 /// Hace coincidir el registro de autoarranque con la configuración.
@@ -208,6 +219,16 @@ mod pruebas {
         c.opacidad = 0.8;
         c.normalizar();
         assert_eq!(c.opacidad, 0.8);
+    }
+
+    #[test]
+    fn borde_pausado_por_defecto_y_guardado() {
+        let c: Config = serde_json::from_str("{}").unwrap();
+        assert!(!c.borde_pausado);
+        let c: Config = serde_json::from_str(r#"{"borde_pausado":true}"#).unwrap();
+        assert!(c.borde_pausado);
+        let ida: Config = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        assert_eq!(ida, c);
     }
 
     #[test]

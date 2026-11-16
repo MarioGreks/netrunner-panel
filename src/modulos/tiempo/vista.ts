@@ -1,4 +1,4 @@
-// Módulo TIEMPO: reloj, tiempo meteorológico (Open-Meteo) y agenda (ICS de Outlook).
+// Módulo TIEMPO: tiempo meteorológico (Open-Meteo) y agenda (ICS de Outlook).
 import {
   alEvento,
   desmarcarCuenta,
@@ -22,7 +22,6 @@ const MESES_LARGOS = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JU
 /** La agenda cubre unos 6 meses (igual que `DIAS_VENTANA` en calendario.rs) y se pinta de 14 en 14 días. */
 const DIAS_AGENDA = 183;
 const TANDA = 14;
-const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
 const dos = (n: number) => String(n).padStart(2, "0");
 
 const esc = (t: string) =>
@@ -109,16 +108,11 @@ function agrupar(eventos: EventoCalendario[], ahora: Date): Map<number, Linea[]>
 export function montar(contenedor: HTMLElement): void {
   contenedor.innerHTML = `
     <div class="tmp">
-      <div class="tmp__reloj">
-        <div class="tmp__hora" data-id="hora">--:--:--</div>
-        <div class="tmp__fecha" data-id="fecha"></div>
-      </div>
-      <button class="tmp__engranaje" data-id="engranaje" type="button" title="Ajustes del calendario" aria-label="Abrir los ajustes">${ENGRANAJE}</button>
-
-      ${marco("METEO", `<span class="marco__etiqueta" data-id="meteo-hace"></span>`, "", "marco--cian", "meteo")}
+      <section class="marco marco--cian tmp__tira" data-id="meteo"></section>
       ${marco(
         "AGENDA",
         `<span class="marco__etiqueta" data-id="agenda-hace"></span>
+         <button class="tmp__engranaje" data-id="engranaje" type="button" title="Ajustes del calendario" aria-label="Abrir los ajustes">${ENGRANAJE}</button>
          <button class="tmp__sync tmp__hoy" data-id="hoy" type="button" title="Volver a hoy" hidden>HOY</button>
          <button class="tmp__sync" data-id="sync" type="button" title="Sincronizar ahora"><span class="tmp__giro" data-id="giro">⟳</span> SYNC</button>`,
         `<div class="tmp__error" data-id="agenda-error" hidden></div>
@@ -130,11 +124,8 @@ export function montar(contenedor: HTMLElement): void {
     </div>`;
 
   const q = <T extends HTMLElement>(id: string) => contenedor.querySelector<T>(`[data-id="${id}"]`)!;
-  const raiz = q("hora");
-  const hora = raiz;
-  const fecha = q("fecha");
-  const cuerpoMeteo = q("meteo-cuerpo");
-  const meteoHace = q("meteo-hace");
+  const tira = q("meteo");
+  const raiz = tira;
   const errorAgenda = q("agenda-error");
   const cuentasEl = q("cuentas");
   const scroll = q("agenda-scroll");
@@ -165,57 +156,49 @@ export function montar(contenedor: HTMLElement): void {
 
   q("engranaje").addEventListener("click", () => abrirAjustes("calendario"));
 
-  // --- Reloj ---
-  const pintarReloj = () => {
-    const d = new Date();
-    hora.textContent = `${dos(d.getHours())}:${dos(d.getMinutes())}:${dos(d.getSeconds())}`;
-    fecha.textContent = `${DIAS[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()]} ${d.getFullYear()}`;
-  };
-
   // --- Meteo ---
   const pintarMeteo = () => {
     const m = meteo;
-    meteoHace.textContent = m?.actualizado ? hace(m.actualizado) : "";
     if (!m || !m.ciudad) {
-      cuerpoMeteo.innerHTML = `<div class="tmp__vacio">SIN CIUDAD CONFIGURADA<button class="tmp__btn" data-accion="meteo" type="button">CONFIGURAR</button></div>`;
+      tira.title = "";
+      tira.innerHTML = `<button class="tmp__sin-ciudad" data-accion="meteo" type="button">SIN CIUDAD · CONFIGURAR</button>`;
       return;
     }
     const a = m.actual;
-    let html = "";
-    if (a) {
-      html += `
-        <div class="tmp__actual-meteo">
-          <div class="tmp__icono-grande">${icono(a.icono, 56)}</div>
-          <div class="tmp__temp">${redondear(a.temperatura)}</div>
-          <div class="tmp__detalles">
-            <span class="tmp__condicion">${esc(a.texto).toUpperCase()}</span>
-            <span>SENSACIÓN <b>${redondear(a.sensacion)}</b></span>
-            <span>HUMEDAD <b>${Math.round(a.humedad)}%</b></span>
-            <span>VIENTO <b>${Math.round(a.viento)} km/h</b></span>
-          </div>
-        </div>`;
-    } else {
-      html += `<div class="tmp__vacio">${m.cargando ? "CARGANDO…" : "SIN DATOS"}</div>`;
-    }
-    html += `<div class="tmp__ciudad">${esc(m.ciudad.nombre).toUpperCase()}${m.ciudad.pais ? ` · ${esc(m.ciudad.pais).toUpperCase()}` : ""}</div>`;
-    if (m.dias.length) {
-      html += `<div class="tmp__dias">${m.dias
-        .map((d) => {
-          const [y, mes, dia] = d.fecha.split("-").map(Number);
-          const nombre = DIAS[new Date(y, mes - 1, dia).getDay()].slice(0, 3);
-          const lluvia = d.prob_lluvia === null ? "" : `${GOTA}${Math.round(d.prob_lluvia)}%`;
-          return `<div class="tmp__dia" title="${esc(d.texto)}">
-            <span class="tmp__dia-nombre">${nombre}</span>
-            ${icono(d.icono, 26)}
-            <span class="tmp__dia-max">${d.maxima === null ? "--" : redondear(d.maxima)}</span>
-            <span class="tmp__dia-min">${d.minima === null ? "--" : redondear(d.minima)}</span>
-            <span class="tmp__dia-lluvia">${lluvia}</span>
-          </div>`;
-        })
-        .join("")}</div>`;
-    }
-    if (m.error) html += `<div class="tmp__error">${esc(m.error)}</div>`;
-    cuerpoMeteo.innerHTML = html;
+    const hoy = m.dias[0];
+    const ciudad = `${esc(m.ciudad.nombre).toUpperCase()}${m.ciudad.pais ? ` · ${esc(m.ciudad.pais).toUpperCase()}` : ""}`;
+    tira.title = a
+      ? `${a.texto}
+Sensación ${redondear(a.sensacion)}
+Humedad ${Math.round(a.humedad)}%
+Viento ${Math.round(a.viento)} km/h${m.actualizado ? `
+Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
+      : "";
+    const izq = a
+      ? `<span class="tmp__t-icono">${icono(a.icono, 24)}</span>
+         <span class="tmp__t-temp-col"><span class="tmp__temp">${redondear(a.temperatura)}</span><span class="tmp__ciudad">${ciudad}</span></span>`
+      : `<span class="tmp__t-temp-col"><span class="tmp__ciudad">${m.cargando ? "CARGANDO…" : m.error ? esc(m.error) : "SIN DATOS"}</span><span class="tmp__ciudad">${ciudad}</span></span>`;
+    const centro = hoy
+      ? `<span>MÁX <b>${hoy.maxima === null ? "--" : redondear(hoy.maxima)}</b></span>
+         <span>MÍN <b>${hoy.minima === null ? "--" : redondear(hoy.minima)}</b></span>
+         <span class="tmp__t-lluvia">${GOTA}<b>${hoy.prob_lluvia === null ? "--" : `${Math.round(hoy.prob_lluvia)}%`}</b></span>`
+      : "";
+    const dias = m.dias
+      .slice(0, 5)
+      .map((d) => {
+        const [y, mes, dia] = d.fecha.split("-").map(Number);
+        const nombre = DIAS[new Date(y, mes - 1, dia).getDay()].slice(0, 3);
+        return `<span class="tmp__dia" title="${esc(d.texto)}">
+          <span class="tmp__dia-nombre">${nombre}</span>
+          ${icono(d.icono, 16)}
+          <span class="tmp__dia-max">${d.maxima === null ? "--" : redondear(d.maxima)}</span>
+        </span>`;
+      })
+      .join("");
+    tira.innerHTML = `
+      <div class="tmp__t-izq">${izq}</div>
+      <div class="tmp__t-centro">${centro}</div>
+      <div class="tmp__dias">${dias}</div>`;
   };
 
   // --- Agenda ---
@@ -468,13 +451,11 @@ export function montar(contenedor: HTMLElement): void {
       })
       .catch(() => {});
 
-  pintarReloj();
   pintarAgenda();
   pintarCuentas();
   pintarMeteo();
   intervalo = window.setInterval(() => {
     if (!comprobar()) return;
-    pintarReloj();
     // La agenda y los «hace X min» se refrescan al cambiar el minuto
     if (new Date().getSeconds() === 0) {
       pintarAgenda();
@@ -494,7 +475,6 @@ export function montar(contenedor: HTMLElement): void {
     // Al volver a abrir el panel, la agenda empieza de nuevo por HOY
     diasPintados = TANDA;
     scroll.scrollTop = 0;
-    pintarReloj();
     pintarAgenda();
     pintarCuentas();
     pintarMeteo();

@@ -17,6 +17,8 @@ const ANCHO_PANEL: f64 = 420.0;
 const PANEL_SUPERIOR: (f64, f64) = (760.0, 480.0);
 /// Miniventana del borde (ancho, alto) en píxeles lógicos.
 const MINI: (f64, f64) = (220.0, 96.0);
+/// Separación (lógica) entre la miniventana y la barra de tareas en los bordes laterales.
+const MARGEN_MINI: f64 = 8.0;
 const MARGEN_BORDE: f64 = 2.0;
 /// Fracción central del borde que abre el panel (0.6 = el 60 % del medio).
 const ZONA_CENTRAL: f64 = 0.6;
@@ -58,7 +60,9 @@ fn calcular(app: &AppHandle, borde: Borde) -> Option<Geometria> {
             (
                 (PhysicalPosition::new(x, ay), PhysicalSize::new(pw, ah as u32)),
                 (
-                    PhysicalPosition::new(tx, ay + (ah - th as i32) / 2),
+                    // Abajo del borde, justo encima de la barra de tareas: no tapa
+                    // el centro de las ventanas ni la X de las maximizadas
+                    PhysicalPosition::new(tx, ay + ah - th as i32 - fisico(MARGEN_MINI) as i32),
                     PhysicalSize::new(tw, th),
                 ),
             )

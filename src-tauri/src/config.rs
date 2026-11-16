@@ -40,6 +40,8 @@ pub struct Config {
     /// URL ICS del calendario. Es privada: nunca debe ir a logs ni a mensajes de error.
     pub ics_url: Option<String>,
     pub ciudad: Option<Ciudad>,
+    /// Carpeta de OneDrive para sincronizar las notas (None = solo local).
+    pub carpeta_sync: Option<String>,
 }
 
 impl Default for Config {
@@ -49,6 +51,7 @@ impl Default for Config {
             autostart: true,
             ics_url: None,
             ciudad: None,
+            carpeta_sync: None,
         }
     }
 }
@@ -102,6 +105,9 @@ pub fn set_config(app: AppHandle, estado: State<Estado>, config: Config) -> Resu
     }
     if anterior.ciudad != config.ciudad {
         crate::meteo::actualizar(&app);
+    }
+    if anterior.carpeta_sync != config.carpeta_sync {
+        crate::notas::sincronizar(&app);
     }
     Ok(())
 }

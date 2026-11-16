@@ -3,7 +3,9 @@ import "./styles/hud.css";
 import "./styles/panel.css";
 import "./styles/sistema.css";
 import "./styles/tiempo.css";
+import "./styles/notas.css";
 import { alEvento, obtenerConfig, ocultarPanel, type Borde } from "./lib/ipc";
+import { bloqueo } from "./lib/bloqueo";
 import { montarPestanas } from "./ui/pestanas";
 import { montar as montarSistema } from "./modulos/sistema/vista";
 import { montar as montarTiempo } from "./modulos/tiempo/vista";
@@ -50,6 +52,7 @@ alEvento("panel://mostrar", () => {
 });
 
 alEvento("panel://ocultar", () => {
+  if (bloqueo.dialogoAbierto) return; // selector de carpetas abierto
   panel.classList.add("saliendo", "oculto");
   clearTimeout(temporizadorSalida);
   temporizadorSalida = window.setTimeout(() => {

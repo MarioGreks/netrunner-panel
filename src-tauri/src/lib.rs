@@ -2,6 +2,7 @@ mod calendario;
 mod config;
 mod estado;
 mod meteo;
+mod notas;
 mod sistema;
 mod ventanas;
 
@@ -20,6 +21,7 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec!["--oculto"]),
         ))
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             config::get_config,
             config::set_config,
@@ -30,6 +32,13 @@ pub fn run() {
             calendario::sincronizar_calendario,
             meteo::estado_meteo,
             meteo::buscar_ciudad,
+            notas::estado_notas,
+            notas::guardar_tarea,
+            notas::guardar_nota,
+            notas::borrar_tarea,
+            notas::borrar_nota,
+            notas::sincronizar_notas,
+            notas::carpeta_onedrive,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -41,6 +50,7 @@ pub fn run() {
             sistema::iniciar(&handle);
             calendario::iniciar(&handle);
             meteo::iniciar(&handle);
+            notas::iniciar(&handle);
             ventanas::iniciar_deteccion(handle);
             Ok(())
         })

@@ -21,6 +21,8 @@ const SONDEO: Duration = Duration::from_millis(60);
 const ESPERA_APERTURA: Duration = Duration::from_millis(250);
 /// Tiempo con el cursor fuera del panel antes de cerrarlo (evita cierres por un roce).
 const ESPERA_CIERRE: Duration = Duration::from_millis(120);
+/// Si tras pedir el cierre el panel sigue visible este tiempo, se vuelve a pedir.
+const REARME_CIERRE: Duration = Duration::from_millis(600);
 
 type Rect = (PhysicalPosition<i32>, PhysicalSize<u32>);
 
@@ -188,7 +190,9 @@ pub fn iniciar_deteccion(app: AppHandle) {
     thread::spawn(move || {
         let mut desde: Option<Instant> = None;
         let mut fuera_desde: Option<Instant> = None;
-        let mut cerrando = false;
+        // Momento en que se pidió el cierre. Si el panel sigue visible pasado un rato
+        // (el frontend lo ignoró, p. ej. con un diálogo nativo abierto), se rearma.
+        let mut cerrando: Option<Instant> = None;
         let mut armado = true;
         loop {
             thread::sleep(SONDEO);
@@ -201,21 +205,24 @@ pub fn iniciar_deteccion(app: AppHandle) {
             if estado.panel_visible.load(Ordering::SeqCst) {
                 if sobre_panel(&g, c.x, c.y) {
                     fuera_desde = None;
-                    if cerrando {
+                    if cerrando.take().is_some() {
                         // Volvió durante la animación de salida: se cancela
-                        cerrando = false;
                         let _ = app.emit("panel://mostrar", ());
                     }
-                } else if !cerrando {
+                } else if let Some(t) = cerrando {
+                    if t.elapsed() >= REARME_CIERRE {
+                        cerrando = None; // cierre ignorado: volver a pedirlo
+                    }
+                } else {
                     let t0 = *fuera_desde.get_or_insert_with(Instant::now);
                     if t0.elapsed() >= ESPERA_CIERRE {
-                        cerrando = true;
+                        cerrando = Some(Instant::now());
                         fuera_desde = None;
                         pedir_ocultar(&app);
                     }
                 }
             } else {
-                cerrando = false;
+                cerrando = None;
                 fuera_desde = None;
             }
 

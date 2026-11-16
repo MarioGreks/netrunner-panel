@@ -37,6 +37,9 @@ export function montarPestanas(
   });
 
   window.addEventListener("keydown", (e) => {
+    // No cambiar de pestaña mientras se escribe
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
     const p = PESTANAS[Number(e.key) - 1];
     if (p && !e.ctrlKey && !e.altKey && !e.metaKey) activar(p.id);
   });

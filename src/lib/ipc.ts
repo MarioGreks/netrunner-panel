@@ -17,6 +17,8 @@ export interface Config {
   /** URL ICS privada: no se muestra ni se registra en ningún sitio. */
   ics_url: string | null;
   ciudad: Ciudad | null;
+  /** Carpeta de OneDrive para sincronizar las notas; null = solo local. */
+  carpeta_sync: string | null;
 }
 
 export const obtenerConfig = () => invoke<Config>("get_config");
@@ -102,13 +104,51 @@ export interface EstadoMeteo {
 export const estadoMeteo = () => invoke<EstadoMeteo>("estado_meteo");
 export const buscarCiudad = (texto: string) => invoke<Ciudad[]>("buscar_ciudad", { texto });
 
+export interface Tarea {
+  id: string;
+  texto: string;
+  hecha: boolean;
+  orden: number;
+  creada: number;
+  modificada: number;
+  borrada: boolean;
+}
+
+export interface Nota {
+  id: string;
+  titulo: string;
+  cuerpo: string;
+  creada: number;
+  modificada: number;
+  borrada: boolean;
+}
+
+export interface EstadoNotas {
+  tareas: Tarea[];
+  notas: Nota[];
+  /** Milisegundos UTC */
+  ultima_sync: number | null;
+  sincronizando: boolean;
+  error: string | null;
+  carpeta_sync: string | null;
+}
+
+export const estadoNotas = () => invoke<EstadoNotas>("estado_notas");
+export const guardarTarea = (tarea: Tarea) => invoke<void>("guardar_tarea", { tarea });
+export const guardarNota = (nota: Nota) => invoke<void>("guardar_nota", { nota });
+export const borrarTarea = (id: string) => invoke<void>("borrar_tarea", { id });
+export const borrarNota = (id: string) => invoke<void>("borrar_nota", { id });
+export const carpetaOnedrive = () => invoke<string | null>("carpeta_onedrive");
+export const sincronizarNotas = () => invoke<void>("sincronizar_notas");
+
 export type EventoPanel =
   | "panel://mostrar"
   | "panel://ocultar"
   | "config://cambio"
   | "sistema://muestra"
   | "calendario://estado"
-  | "meteo://estado";
+  | "meteo://estado"
+  | "notas://estado";
 
 export const alEvento = <T = unknown>(
   evento: EventoPanel,

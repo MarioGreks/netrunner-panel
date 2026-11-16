@@ -1,0 +1,236 @@
+/* Módulo NOTAS: tareas y notas rápidas con sincronización opcional. */
+.nts { position: relative; display: flex; flex-direction: column; gap: var(--esp-3); }
+.nts [hidden] { display: none; }
+
+/* Cabecera: segmentos, indicador de sincronización y engranaje */
+.nts__cab { display: flex; align-items: center; gap: var(--esp-2); }
+.nts__segmentos { display: flex; flex: 1; gap: 2px; }
+.nts__seg {
+  flex: 1;
+  padding: var(--esp-2) var(--esp-3);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.16em;
+  color: var(--texto-tenue);
+  background: none;
+  border: 1px solid var(--amarillo-suave);
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.nts__seg:hover { color: var(--amarillo); border-color: var(--amarillo-tenue); }
+.nts__seg--activo { color: var(--fondo); background: var(--amarillo); border-color: var(--amarillo); font-weight: 700; }
+.nts__seg--activo:hover { color: var(--fondo); }
+
+.nts__sync {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-1);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  color: var(--cian);
+}
+.nts__sync--local { color: var(--texto-tenue); }
+.nts__sync--error { color: var(--rojo); }
+.nts__sync--girando svg { animation: nts-pulso 1s ease-in-out infinite; }
+@keyframes nts-pulso { 50% { opacity: 0.25; } }
+.nts__sync--local svg path[data-nube] { display: none; }
+
+.nts__engranaje {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  background: none;
+  border: 1px solid var(--cian-tenue);
+  color: var(--cian);
+  cursor: pointer;
+}
+.nts__engranaje:hover { background: var(--cian-suave); border-color: var(--cian); }
+
+/* Botones, inputs y avisos */
+.nts__btn {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  padding: var(--esp-1) var(--esp-3);
+  background: none;
+  color: var(--cian);
+  border: 1px solid var(--cian-tenue);
+  cursor: pointer;
+}
+.nts__btn:hover { background: var(--cian-suave); border-color: var(--cian); }
+.nts__btn--ok { color: var(--amarillo); border-color: var(--amarillo-tenue); }
+.nts__btn--ok:hover { background: var(--amarillo-suave); border-color: var(--amarillo); }
+.nts__btn--peligro { color: var(--rojo); border-color: rgba(255, 42, 77, 0.4); }
+.nts__btn--peligro:hover { background: rgba(255, 42, 77, 0.12); border-color: var(--rojo); }
+
+.nts__input {
+  width: 100%;
+  padding: var(--esp-2);
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-s);
+  color: var(--texto);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--cian-tenue);
+  outline: none;
+  user-select: text;
+}
+.nts__input:focus { border-color: var(--cian); }
+.nts__input::placeholder { color: var(--amarillo); opacity: 0.7; letter-spacing: 0.1em; }
+.nts__input--linea { padding: 2px var(--esp-1); }
+
+.nts__etiqueta { margin-bottom: var(--esp-1); font-family: var(--fuente-titulo); font-size: var(--tam-xs); letter-spacing: 0.14em; color: var(--texto-tenue); }
+.nts__carpeta { margin-bottom: var(--esp-2); font-size: var(--tam-xs); color: var(--cian); word-break: break-all; }
+.nts__fila { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
+.nts__aviso { min-height: 1em; margin-top: var(--esp-2); font-size: var(--tam-xs); color: var(--amarillo); }
+.nts__aviso--error, .nts__error { color: var(--rojo); }
+.nts__error { font-size: var(--tam-xs); letter-spacing: 0.06em; }
+.nts__vacio { padding: var(--esp-3) 0; text-align: center; font-size: var(--tam-xs); letter-spacing: 0.16em; color: var(--texto-tenue); }
+
+/* Tareas */
+.nts__nueva { margin-bottom: var(--esp-3); }
+.nts__lista { list-style: none; }
+.nts__tarea {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  padding: var(--esp-2) var(--esp-1);
+  border-bottom: 1px solid var(--cian-suave);
+}
+.nts__tarea[draggable="true"] { cursor: grab; }
+.nts__tarea--arrastrada { opacity: 0.4; }
+.nts__tarea--antes { box-shadow: 0 -2px 0 var(--amarillo); }
+.nts__tarea--despues { box-shadow: 0 2px 0 var(--amarillo); }
+
+.nts__casilla {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  position: relative;
+  background: var(--cian-tenue);
+  border: 0;
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.nts__casilla::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  background: var(--fondo);
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%);
+}
+.nts__casilla:hover::before { background: #10333a; }
+.nts__casilla svg { position: relative; z-index: 1; color: var(--fondo); }
+.nts__tarea--hecha .nts__casilla,
+.nts__tarea--tachando .nts__casilla { background: var(--amarillo); }
+.nts__tarea--hecha .nts__casilla::before,
+.nts__tarea--tachando .nts__casilla::before { background: var(--amarillo); }
+
+.nts__texto {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  font-size: var(--tam-s);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.nts__texto::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 52%;
+  height: 1px;
+  width: 0;
+  background: var(--amarillo);
+  transition: width 0.35s ease-out;
+}
+.nts__tarea--tachando .nts__texto { color: var(--texto-tenue); }
+.nts__tarea--tachando .nts__texto::after { width: 100%; }
+.nts__tarea--hecha .nts__texto { color: var(--texto-tenue); text-decoration: line-through; }
+
+.nts__borrar {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  font-size: var(--tam-xs);
+  line-height: 1;
+  color: var(--rojo);
+  background: none;
+  border: 1px solid transparent;
+  opacity: 0;
+  cursor: pointer;
+}
+.nts__tarea:hover .nts__borrar, .nts__nota:hover .nts__borrar, .nts__borrar:focus-visible { opacity: 1; }
+.nts__borrar:hover { border-color: var(--rojo); background: rgba(255, 42, 77, 0.12); }
+
+.nts__plegable {
+  width: 100%;
+  margin-top: var(--esp-3);
+  padding: var(--esp-1) 0;
+  text-align: left;
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.nts__plegable:hover { color: var(--cian); }
+.nts__flecha { display: inline-block; width: 1em; }
+
+/* Lista de notas */
+.nts__nota { display: flex; align-items: center; gap: var(--esp-2); border-bottom: 1px solid var(--cian-suave); }
+.nts__nota-abrir {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  gap: 2px;
+  padding: var(--esp-2) var(--esp-1);
+  text-align: left;
+  font-family: var(--fuente-datos);
+  color: var(--texto);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.nts__nota-abrir:hover { background: var(--cian-suave); }
+.nts__nota-titulo { font-size: var(--tam-s); font-weight: 700; color: var(--amarillo); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nts__nota-linea { font-size: var(--tam-xs); color: var(--texto-tenue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nts__nota-hace { font-size: var(--tam-xs); letter-spacing: 0.1em; color: var(--cian); opacity: 0.7; }
+.nts__confirmar {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-1);
+  flex: none;
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.1em;
+  color: var(--rojo);
+}
+
+/* Editor de nota */
+.nts__editor-cuerpo { display: flex; flex-direction: column; gap: var(--esp-2); }
+.nts__editor-titulo { font-weight: 700; color: var(--amarillo); }
+.nts__editor-texto {
+  width: 100%;
+  min-height: 320px;
+  height: calc(100vh - 260px);
+  padding: var(--esp-2);
+  resize: none;
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-s);
+  line-height: 1.5;
+  color: var(--texto);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--cian-tenue);
+  outline: none;
+  user-select: text;
+}
+.nts__editor-texto:focus { border-color: var(--cian); }

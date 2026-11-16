@@ -12,7 +12,7 @@ import { bloqueo } from "./lib/bloqueo";
 import { alAbrirAjustes, type SeccionAjustes } from "./lib/navegacion";
 import { montarPestanas } from "./ui/pestanas";
 import { montarEnlace } from "./ui/enlace";
-import { crearWireframe } from "./ui/wireframe";
+import { montarResumen } from "./ui/resumen";
 import { getVersion } from "@tauri-apps/api/app";
 import { montar as montarSistema } from "./modulos/sistema/vista";
 import { montar as montarTiempo } from "./modulos/tiempo/vista";
@@ -46,7 +46,6 @@ pintarHora();
 setInterval(pintarHora, 1000);
 
 const botonAjustes = document.getElementById("ajustes")!;
-const wire = crearWireframe(document.getElementById("wire") as HTMLCanvasElement);
 montarEnlace(document.getElementById("enlace")!);
 
 // Pie con la versión de la app
@@ -74,6 +73,8 @@ const activar = montarPestanas(barra, (id) => {
   MODULOS[id](contenido);
 });
 
+montarResumen(document.getElementById("resumen")!, (id) => activar(id));
+
 const abrirVistaAjustes = (seccion?: SeccionAjustes) => {
   salirDeAjustes();
   contenido.replaceChildren();
@@ -95,7 +96,7 @@ const iniciarEntrada = () => {
   clearTimeout(temporizadorEntrada);
   panel.classList.remove("entrando");
   if (movimientoReducido.matches) return;
-  contenido.querySelectorAll<HTMLElement>(".marco").forEach((m, i) => m.style.setProperty("--i", String(Math.min(i, 8))));
+  contenido.querySelectorAll<HTMLElement>(".marco").forEach((m, i) => m.style.setProperty("--i", String(Math.min(i, 8) + 2)));
   void panel.offsetWidth; // reinicia las animaciones CSS
   panel.classList.add("entrando");
   temporizadorEntrada = window.setTimeout(() => panel.classList.remove("entrando"), 450);
@@ -109,7 +110,6 @@ alEvento("panel://mostrar", () => {
   // salida: sin escaneo, glitch ni escalonado otra vez.
   const cancelaCierre = panel.classList.contains("saliendo");
   panel.classList.remove("saliendo");
-  wire.iniciar();
   if (cancelaCierre) {
     panel.classList.remove("oculto");
     return;
@@ -125,7 +125,6 @@ alEvento("panel://mostrar", () => {
 
 alEvento("panel://ocultar", () => {
   if (bloqueo.dialogoAbierto) return; // selector de carpetas abierto
-  wire.parar(); // el requestAnimationFrame solo corre con el panel visible
   clearTimeout(temporizadorEntrada);
   panel.classList.remove("entrando");
   panel.classList.add("saliendo", "oculto");

@@ -1,0 +1,83 @@
+/* Módulo SISTEMA. El panel mide 420 px; .contenido (panel.css) ya hace scroll vertical. */
+.contenido::-webkit-scrollbar-thumb:hover { background: var(--amarillo); }
+.contenido { scrollbar-width: thin; scrollbar-color: var(--amarillo) transparent; }
+
+.sis { display: flex; flex-direction: column; gap: var(--esp-4); }
+.sis [hidden] { display: none; }
+
+.sis__fila { display: flex; align-items: flex-end; gap: var(--esp-4); }
+.sis__fila--centro { align-items: center; }
+.sis__columna { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--esp-2); }
+
+.sis__grande {
+  font-family: var(--fuente-datos);
+  font-weight: 700;
+  font-size: var(--tam-xl);
+  line-height: 1;
+  min-width: 4.2ch;
+  color: var(--amarillo);
+  text-shadow: 0 0 10px var(--amarillo-tenue);
+}
+.sis__grande--s { font-size: var(--tam-l); min-width: 0; }
+.sis__grande.sis--alto { color: var(--rojo); text-shadow: 0 0 10px rgba(255, 42, 77, 0.5); }
+
+.sis__onda { flex: 1; min-width: 0; height: 56px; display: block; }
+.sis__onda--baja { width: 100%; height: 44px; flex: none; }
+
+.sis__sub {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+.sis__dato { font-family: var(--fuente-datos); color: var(--texto); letter-spacing: 0; }
+.sis__texto-ram { display: flex; flex-direction: column; gap: var(--esp-1); }
+.sis__texto-ram .sis__dato { font-size: var(--tam-l); color: var(--cian); }
+
+/* Minibarras por núcleo */
+.sis__nucleos { display: flex; gap: 3px; height: 28px; margin-top: var(--esp-3); }
+.minibarra {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  background: var(--amarillo-suave);
+}
+.minibarra i { display: block; width: 100%; height: 0; background: var(--amarillo); transition: height 0.4s ease-out; }
+.minibarra--alta i { background: var(--rojo); }
+
+/* Anillo segmentado */
+.anillo { display: block; flex: none; }
+.anillo__seg { fill: var(--color-anillo, var(--cian)); }
+.anillo__valor {
+  font-family: var(--fuente-datos);
+  font-weight: 700;
+  font-size: 18px;
+  fill: var(--texto);
+}
+.anillo--nd .anillo__valor { font-size: 14px; fill: var(--texto-tenue); }
+
+/* GPU sin datos: atenuada */
+.sis--nd { opacity: 0.4; }
+
+/* Discos: barra segmentada */
+.sis__discos { display: flex; flex-direction: column; gap: var(--esp-3); }
+.disco {
+  display: grid;
+  grid-template-columns: 2.5ch 1fr;
+  column-gap: var(--esp-2);
+  row-gap: var(--esp-1);
+  align-items: center;
+}
+.disco__letra { font-weight: 700; color: var(--cian); }
+.disco__barra { display: flex; gap: 2px; height: 10px; }
+.disco__barra i { flex: 1; background: var(--cian-suave); }
+.disco__barra i.on { background: var(--cian); box-shadow: 0 0 4px var(--cian-tenue); }
+.disco__barra--llena i.on { background: var(--rojo); box-shadow: none; }
+.disco__texto { grid-column: 2; font-size: var(--tam-xs); color: var(--texto-tenue); }
+
+/* Batería */
+.sis__bat-icono { width: 28px; height: 28px; color: var(--amarillo); }
+.sis__bat-icono svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.5; }
+.sis__rayo { display: none; }
+.sis__bat-icono--carga { color: var(--cian); }
+.sis__bat-icono--carga .sis__rayo { display: inline; fill: currentColor; }

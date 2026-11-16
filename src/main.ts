@@ -1,6 +1,7 @@
 import "./styles/tokens.css";
 import "./styles/hud.css";
 import "./styles/panel.css";
+import "./styles/sistema.css";
 import { alEvento, obtenerConfig, ocultarPanel, type Borde } from "./lib/ipc";
 import { montarPestanas } from "./ui/pestanas";
 import { montar as montarSistema } from "./modulos/sistema/vista";

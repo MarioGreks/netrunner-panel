@@ -1,5 +1,6 @@
 mod config;
 mod estado;
+mod sistema;
 mod ventanas;
 
 use estado::Estado;
@@ -22,6 +23,7 @@ pub fn run() {
             config::set_config,
             ventanas::alternar_panel,
             ventanas::ocultar_panel,
+            sistema::muestra_sistema,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -30,6 +32,7 @@ pub fn run() {
             app.manage(Estado::nuevo(cfg));
             // Siempre arranca solo con la pestaña (con o sin --oculto)
             ventanas::preparar(&handle);
+            sistema::iniciar(&handle);
             ventanas::iniciar_deteccion(handle);
             Ok(())
         })

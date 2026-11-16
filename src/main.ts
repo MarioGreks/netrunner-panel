@@ -11,7 +11,7 @@ import "./styles/ajustes.css";
 import { alEvento, obtenerConfig, ocultarPanel, type Borde } from "./lib/ipc";
 import { iniciarTema } from "./lib/tema";
 import { bloqueo } from "./lib/bloqueo";
-import { alAbrirAjustes, type SeccionAjustes } from "./lib/navegacion";
+import { alAbrirAjustes, pedirIrAEvento, type SeccionAjustes } from "./lib/navegacion";
 import { montarPestanas } from "./ui/pestanas";
 import { montarEnlace } from "./ui/enlace";
 import { montarResumen } from "./ui/resumen";
@@ -154,6 +154,12 @@ alEvento("panel://ocultar", () => {
 });
 
 alEvento("panel://ajustes", () => abrirVistaAjustes());
+
+// La miniventana pide ir a un evento: pestaña METEO (saliendo de AJUSTES si hace falta) y scroll hasta él
+alEvento<string>("panel://ir_evento", (id) => {
+  if (cerrarAjustes || idActual !== "tiempo") activar("tiempo");
+  pedirIrAEvento(id);
+});
 
 alEvento<Borde>("config://cambio", aplicarBorde);
 

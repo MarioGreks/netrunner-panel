@@ -12,8 +12,9 @@ import {
   type EstadoCalendario,
   type EstadoMeteo,
   type EventoCalendario,
+  type HoraMeteo,
 } from "../../lib/ipc";
-import { abrirAjustes } from "../../lib/navegacion";
+import { abrirAjustes, alIrAEvento, tomarEventoPendiente } from "../../lib/navegacion";
 import { iconoMeteo } from "../../lib/iconos-meteo";
 import { colorCategoria } from "../../lib/categorias";
 
@@ -105,6 +106,73 @@ function agrupar(eventos: EventoCalendario[], ahora: Date): Map<number, Linea[]>
   return new Map([...grupos.entries()].sort((a, b) => a[0] - b[0]));
 }
 
+/** METEO plegada o desplegada: se recuerda mientras la app está abierta (sobrevive a cambiar de pestaña). */
+let tiraAbierta = false;
+
+/** Gráfica de 24 h en SVG: temperatura (línea y relleno, primario), lluvia (barras, secundario),
+ *  etiquetas cada 3 h y máxima y mínima marcadas. Los colores salen de clases CSS con variables
+ *  de tema, así que el cambio de tema no obliga a redibujar. */
+function grafica24h(horas: HoraMeteo[]): string {
+  const W = 340;
+  const H = 108;
+  const PX = 14;
+  const Y_ALTO = 24;
+  const Y_BAJO = 74;
+  const BASE = 84;
+  const BARRA_MAX = 28;
+  const n = horas.length;
+  if (n < 2) return `<div class="tmp__g-vacio">SIN DATOS HORARIOS</div>`;
+  const x = (i: number) => PX + (i * (W - 2 * PX)) / (n - 1);
+  const pts = horas.flatMap((h, i) => (h.temperatura === null ? [] : [{ i, t: h.temperatura }]));
+  let capas = "";
+  if (pts.length >= 2) {
+    let tmin = Math.min(...pts.map((p) => p.t));
+    let tmax = Math.max(...pts.map((p) => p.t));
+    if (tmax - tmin < 1) {
+      tmax += 0.5;
+      tmin -= 0.5;
+    }
+    const y = (t: number) => Y_BAJO - ((t - tmin) / (tmax - tmin)) * (Y_BAJO - Y_ALTO);
+    const linea = pts.map((p, k) => `${k ? "L" : "M"}${x(p.i).toFixed(1)} ${y(p.t).toFixed(1)}`).join("");
+    const primero = pts[0];
+    const ultimo = pts[pts.length - 1];
+    capas += `<path class="tmp__g-area" d="${linea}L${x(ultimo.i).toFixed(1)} ${BASE}L${x(primero.i).toFixed(1)} ${BASE}Z"/>`;
+    capas += `<path class="tmp__g-linea" d="${linea}"/>`;
+    const pMax = pts.reduce((a, b) => (b.t > a.t ? b : a));
+    const pMin = pts.reduce((a, b) => (b.t < a.t ? b : a));
+    const marca = (p: { i: number; t: number }, etiqueta: string, arriba: boolean) => {
+      const px = x(p.i);
+      const py = y(p.t);
+      const ancla = px < 44 ? "start" : px > W - 44 ? "end" : "middle";
+      const ty = arriba ? Math.max(8, py - 6) : Math.min(BASE - 2, py + 11);
+      return `<circle class="tmp__g-pico" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.6"/>
+        <text class="tmp__g-txt tmp__g-txt--dato" x="${px.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="${ancla}">${etiqueta} ${redondear(p.t)}</text>`;
+    };
+    capas += marca(pMax, "MÁX", true);
+    if (pMin.i !== pMax.i) capas += marca(pMin, "MÍN", false);
+  }
+  const barras = horas
+    .map((h, i) => {
+      const p = h.prob_lluvia ?? 0;
+      if (p <= 0) return "";
+      const alto = Math.max(1, (p / 100) * BARRA_MAX);
+      return `<rect class="tmp__g-barra" x="${(x(i) - 1.3).toFixed(1)}" y="${(BASE - alto).toFixed(1)}" width="2.6" height="${alto.toFixed(1)}"><title>${Math.round(p)}% de lluvia</title></rect>`;
+    })
+    .join("");
+  const etiquetas = horas
+    .map((h, i) => {
+      const hh = Number(h.hora.slice(11, 13));
+      return hh % 3 === 0
+        ? `<text class="tmp__g-txt" x="${x(i).toFixed(1)}" y="${H - 4}" text-anchor="middle">${dos(hh)}h</text><line class="tmp__g-marca" x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${BASE}" y2="${BASE + 3}"/>`
+        : "";
+    })
+    .join("");
+  return `<svg class="tmp__grafica" viewBox="0 0 ${W} ${H}" role="img" aria-label="Previsión de las próximas 24 horas">
+    <line class="tmp__g-base" x1="${PX}" x2="${W - PX}" y1="${BASE}" y2="${BASE}"/>
+    ${barras}${capas}${etiquetas}
+  </svg>`;
+}
+
 export function montar(contenedor: HTMLElement): void {
   contenedor.innerHTML = `
     <div class="tmp">
@@ -116,6 +184,7 @@ export function montar(contenedor: HTMLElement): void {
          <button class="tmp__sync tmp__hoy" data-id="hoy" type="button" title="Volver a hoy" hidden>HOY</button>
          <button class="tmp__sync" data-id="sync" type="button" title="Sincronizar ahora"><span class="tmp__giro" data-id="giro">⟳</span> SYNC</button>`,
         `<div class="tmp__error" data-id="agenda-error" hidden></div>
+         <div class="tmp__aviso" data-id="aviso" hidden></div>
          <div class="tmp__cuentas" data-id="cuentas" hidden></div>
          <div class="tmp__scroll" data-id="agenda-scroll"></div>`,
         "tmp__marco-agenda",
@@ -128,6 +197,7 @@ export function montar(contenedor: HTMLElement): void {
   const raiz = tira;
   const errorAgenda = q("agenda-error");
   const cuentasEl = q("cuentas");
+  const avisoEl = q("aviso");
   const scroll = q("agenda-scroll");
   const botonHoy = q<HTMLButtonElement>("hoy");
   const agendaHace = q("agenda-hace");
@@ -161,6 +231,8 @@ export function montar(contenedor: HTMLElement): void {
     const m = meteo;
     if (!m || !m.ciudad) {
       tira.title = "";
+      tira.classList.remove("tmp__tira--abierta", "tmp__tira--clicable");
+      tira.removeAttribute("aria-expanded");
       tira.innerHTML = `<button class="tmp__sin-ciudad" data-accion="meteo" type="button">SIN CIUDAD · CONFIGURAR</button>`;
       return;
     }
@@ -195,11 +267,57 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
         </span>`;
       })
       .join("");
+    // Detalle que se despliega: condición actual, gráfica de 24 h y los 5 días en grande
+    const detalleActual = a
+      ? `<div class="tmp__d-actual">
+          <span class="tmp__d-cond">${esc(a.texto).toUpperCase()}</span>
+          <span>SENSACIÓN <b>${redondear(a.sensacion)}</b></span>
+          <span>HUMEDAD <b>${Math.round(a.humedad)}%</b></span>
+          <span>VIENTO <b>${Math.round(a.viento)} km/h</b></span>
+        </div>`
+      : "";
+    const diasGrandes = m.dias
+      .slice(0, 5)
+      .map((d, i) => {
+        const [y, mes, dia] = d.fecha.split("-").map(Number);
+        const nombre = i === 0 ? "HOY" : DIAS[new Date(y, mes - 1, dia).getDay()].slice(0, 3);
+        return `<div class="tmp__dg">
+          <span class="tmp__dg-nombre">${nombre}</span>
+          <span class="tmp__dg-icono">${icono(d.icono, 28)}</span>
+          <span class="tmp__dg-cond">${esc(d.texto)}</span>
+          <span class="tmp__dg-temp"><b>${d.maxima === null ? "--" : redondear(d.maxima)}</b> <i>${d.minima === null ? "--" : redondear(d.minima)}</i></span>
+          <span class="tmp__dg-lluvia">${GOTA}${d.prob_lluvia === null ? "--" : `${Math.round(d.prob_lluvia)}%`}</span>
+        </div>`;
+      })
+      .join("");
+    tira.classList.toggle("tmp__tira--abierta", tiraAbierta);
+    tira.classList.add("tmp__tira--clicable");
+    tira.setAttribute("aria-expanded", String(tiraAbierta));
     tira.innerHTML = `
-      <div class="tmp__t-izq">${izq}</div>
-      <div class="tmp__t-centro">${centro}</div>
-      <div class="tmp__dias">${dias}</div>`;
+      <div class="tmp__t-fila">
+        <div class="tmp__t-izq">${izq}</div>
+        <div class="tmp__t-centro">${centro}</div>
+        <div class="tmp__dias">${dias}</div>
+      </div>
+      <span class="tmp__t-flecha" aria-hidden="true">${tiraAbierta ? "▴" : "▾"}</span>
+      <div class="tmp__detalle">
+        <div class="tmp__detalle-in">
+          ${detalleActual}
+          ${grafica24h(m.por_horas ?? [])}
+          <div class="tmp__dg-fila">${diasGrandes}</div>
+        </div>
+      </div>`;
   };
+
+  // El clic en la tira (salvo en el botón de configurar) la despliega o pliega en el sitio
+  tira.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("[data-accion]") || !meteo?.ciudad) return;
+    tiraAbierta = !tiraAbierta;
+    tira.classList.toggle("tmp__tira--abierta", tiraAbierta);
+    tira.setAttribute("aria-expanded", String(tiraAbierta));
+    const flecha = tira.querySelector(".tmp__t-flecha");
+    if (flecha) flecha.textContent = tiraAbierta ? "▴" : "▾";
+  });
 
   // --- Agenda ---
   const centinela = document.createElement("div");
@@ -346,22 +464,50 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     });
   };
 
-  /** Hace scroll hasta el evento, pintando antes las tandas que falten. */
+  let temporizadorAviso = 0;
+  const avisar = (texto: string) => {
+    avisoEl.textContent = texto;
+    avisoEl.hidden = false;
+    clearTimeout(temporizadorAviso);
+    temporizadorAviso = window.setTimeout(() => (avisoEl.hidden = true), 3500);
+  };
+
+  let temporizadorDestello = 0;
+  /** Va hasta el evento: pinta las tandas que falten, centra el evento en la lista de la agenda
+   *  (el único contenedor con scroll; `.tmp` y `.contenido` no deben moverse) y lo destella. */
   const irAEvento = (id: string) => {
     const entrada = entradas.find((e) => e.lineas.some((l) => l.ev.id === id));
-    if (!entrada) return;
+    if (!entrada) {
+      avisar("EL EVENTO YA NO ESTÁ EN LA AGENDA");
+      return;
+    }
+    avisoEl.hidden = true;
     if (entrada.idx >= diasPintados) {
       diasPintados = Math.min(DIAS_AGENDA, Math.ceil((entrada.idx + 1) / TANDA) * TANDA);
       anexar();
     }
-    const el = [...scroll.querySelectorAll<HTMLElement>(".tmp__evento")].find((x) => x.dataset.evid === id);
-    if (!el) return;
-    const top = scroll.scrollTop + el.getBoundingClientRect().top - scroll.getBoundingClientRect().top - 24;
+    const el = scroll.querySelector<HTMLElement>(`.tmp__evento[data-evid="${CSS.escape(id)}"]`);
+    if (!el) {
+      avisar("EL EVENTO YA NO ESTÁ EN LA AGENDA");
+      return;
+    }
+    // `scroll` es offsetParent de los eventos: no depende de transformaciones (animación del panel)
+    const top = el.offsetTop - (scroll.clientHeight - el.offsetHeight) / 2;
     scroll.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
-    el.classList.remove("tmp__evento--destello");
+    clearTimeout(temporizadorDestello);
+    scroll.querySelectorAll(".tmp__evento--destello").forEach((x) => x.classList.remove("tmp__evento--destello"));
     void el.offsetWidth;
     el.classList.add("tmp__evento--destello");
-    el.addEventListener("animationend", () => el.classList.remove("tmp__evento--destello"), { once: true });
+    temporizadorDestello = window.setTimeout(() => el.classList.remove("tmp__evento--destello"), 1300);
+  };
+
+  // Petición de ir a un evento (desde la miniventana): espera a tener la agenda leída
+  let pendiente: string | null = tomarEventoPendiente();
+  const procesarPendiente = () => {
+    if (!pendiente || !agenda) return;
+    const id = pendiente;
+    pendiente = null;
+    irAEvento(id);
   };
 
   cuentasEl.addEventListener("click", (e) => {
@@ -408,6 +554,8 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     clearInterval(intervalo);
     observador.disconnect();
     suscripciones.forEach((u) => u());
+    clearTimeout(temporizadorAviso);
+    clearTimeout(temporizadorDestello);
   };
   const comprobar = () => {
     if (!contenedor.isConnected || !contenedor.contains(raiz)) {
@@ -426,6 +574,7 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     if (!comprobar()) return;
     agenda = s;
     pintarAgenda();
+    procesarPendiente();
   };
   const recibirCuentas = (c: CuentaAtras[]) => {
     if (!comprobar()) return;
@@ -464,6 +613,13 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     }
   }, 1000);
 
+  suscripciones.push(
+    alIrAEvento(() => {
+      if (!comprobar()) return;
+      pendiente = tomarEventoPendiente() ?? pendiente;
+      procesarPendiente();
+    }),
+  );
   suscribir(alEvento<EstadoCalendario>("calendario://estado", (s) => {
     // Un cambio de URL llega con un estado nuevo: se relee la config para saber si hay URL
     void leerConfig().then(() => recibirAgenda(s));

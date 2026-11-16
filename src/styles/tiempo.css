@@ -58,11 +58,20 @@
 /* Meteo: tira compacta */
 .tmp__tira {
   display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 56px;
+  padding: var(--esp-1) var(--esp-3);
+}
+/* Fila compacta de siempre (48 px + el relleno de la tira = 56-64 px plegada) */
+.tmp__t-fila {
+  flex: none;
+  display: flex;
   align-items: center;
   gap: var(--esp-3);
-  min-height: 56px;
-  max-height: 64px;
-  padding: var(--esp-1) var(--esp-3);
+  min-height: 48px;
+  max-height: 56px;
+  padding-right: 12px;
 }
 .tmp__t-izq { display: flex; align-items: center; gap: var(--esp-2); min-width: 0; flex: none; }
 .tmp__t-icono { color: var(--cian); filter: drop-shadow(0 0 4px var(--cian-tenue)); display: flex; }
@@ -165,6 +174,7 @@
 .tmp__marco-agenda { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tmp__marco-agenda > .marco__cuerpo { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tmp__scroll {
+  position: relative; /* offsetParent de los eventos: el scroll hasta uno se calcula con offsetTop */
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -261,8 +271,19 @@
 
 .tmp__evento--destello { animation: tmp-destello 1.2s ease-out; }
 @keyframes tmp-destello {
-  0%, 40% { background: var(--amarillo-suave); border-color: var(--amarillo); }
-  100% { background: transparent; }
+  0%, 40% { background: var(--primario-suave); border-color: var(--primario); box-shadow: 0 0 10px var(--primario-tenue); }
+  100% { background: transparent; border-color: transparent; box-shadow: none; }
+}
+
+/* Aviso breve en línea (p. ej. «el evento ya no está en la agenda») */
+.tmp__aviso {
+  margin-bottom: var(--esp-2);
+  padding: var(--esp-1) var(--esp-2);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.12em;
+  color: var(--alerta);
+  border: 1px solid var(--alerta-tenue);
+  background: var(--alerta-suave);
 }
 
 /* Bloque CUENTAS ATRÁS */
@@ -316,3 +337,95 @@
 
 /* La tira METEO es demasiado baja para la micro-etiqueta de esquina */
 .tmp__tira::after { display: none; }
+
+/* --- METEO desplegable (acordeón) --- */
+.tmp__tira--clicable { cursor: pointer; }
+.tmp__tira--clicable:hover .tmp__t-flecha { color: var(--cian); }
+.tmp__t-flecha {
+  position: absolute;
+  top: 3px;
+  right: 8px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--cian-tenue);
+  pointer-events: none;
+}
+/* Altura animada sin medir: la fila de la cuadrícula pasa de 0fr a 1fr */
+.tmp__detalle {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms ease;
+}
+.tmp__tira--abierta .tmp__detalle { grid-template-rows: 1fr; }
+.tmp__detalle-in {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.tmp__tira--abierta .tmp__detalle-in { opacity: 1; padding-top: var(--esp-2); }
+.tmp__d-actual {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--esp-3);
+  padding-top: var(--esp-2);
+  border-top: 1px solid var(--cian-tenue);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--texto-tenue);
+}
+.tmp__d-actual b { color: var(--texto); font-weight: 400; }
+.tmp__d-cond { color: var(--cian); font-family: var(--fuente-titulo); }
+
+/* Gráfica de 24 h: los colores son del tema (variables), no se redibuja al cambiarlo */
+.tmp__grafica { display: block; width: 100%; height: auto; }
+.tmp__g-vacio { padding: var(--esp-3) 0; text-align: center; font-size: 9px; letter-spacing: 0.16em; color: var(--texto-tenue); }
+.tmp__g-linea { fill: none; stroke: var(--primario); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.tmp__g-area { fill: var(--primario-suave); stroke: none; }
+.tmp__g-barra { fill: var(--secundario); opacity: 0.6; }
+.tmp__g-base { stroke: var(--secundario-tenue); stroke-width: 0.6; }
+.tmp__g-marca { stroke: var(--secundario-tenue); stroke-width: 0.6; }
+.tmp__g-pico { fill: var(--primario); stroke: var(--fondo); stroke-width: 0.8; }
+.tmp__g-txt { fill: var(--texto-tenue); font-family: var(--fuente-datos); font-size: 8px; letter-spacing: 0.06em; }
+.tmp__g-txt--dato { fill: var(--primario); }
+
+/* Los 5 días en grande */
+.tmp__dg-fila { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--esp-1); }
+.tmp__dg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--esp-1) 2px;
+  min-width: 0;
+  border: 1px solid var(--secundario-tenue);
+  background: var(--secundario-suave);
+  text-align: center;
+}
+.tmp__dg-nombre { font-family: var(--fuente-titulo); font-size: 9px; letter-spacing: 0.1em; color: var(--texto-tenue); }
+.tmp__dg-icono { display: flex; color: var(--cian); filter: drop-shadow(0 0 4px var(--cian-tenue)); }
+.tmp__dg-cond {
+  width: 100%;
+  min-height: 2.3em;
+  font-size: 8px;
+  line-height: 1.15;
+  color: var(--texto-tenue);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.tmp__dg-temp { font-size: 10px; color: var(--texto); }
+.tmp__dg-temp b { font-weight: 700; color: var(--primario); }
+.tmp__dg-temp i { font-style: normal; color: var(--texto-tenue); }
+.tmp__dg-lluvia { display: flex; align-items: center; gap: 3px; font-size: 9px; color: var(--cian); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tmp__detalle, .tmp__detalle-in { transition: none; }
+}

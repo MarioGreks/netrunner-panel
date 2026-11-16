@@ -42,11 +42,24 @@ pub struct Dia {
     pub icono: String,
 }
 
+/// Una hora de la previsión (las próximas 24 desde la actual).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Hora {
+    /// AAAA-MM-DDTHH:MM, en la hora local de la ciudad
+    pub hora: String,
+    pub temperatura: Option<f64>,
+    pub prob_lluvia: Option<f64>,
+    pub codigo: i32,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct EstadoMeteo {
     pub ciudad: Option<Ciudad>,
     pub actual: Option<Actual>,
     pub dias: Vec<Dia>,
+    /// Próximas 24 horas; vacío en la caché antigua.
+    #[serde(default)]
+    pub por_horas: Vec<Hora>,
     pub actualizado: Option<DateTime<Utc>>,
     pub cargando: bool,
     pub error: Option<String>,
@@ -94,10 +107,24 @@ pub fn describir_codigo(codigo: i32, es_de_dia: bool) -> (&'static str, &'static
 struct RespPrevision {
     current: Option<RespActual>,
     daily: Option<RespDiario>,
+    hourly: Option<RespHoras>,
+}
+
+#[derive(Deserialize)]
+struct RespHoras {
+    time: Vec<String>,
+    #[serde(default)]
+    temperature_2m: Vec<Option<f64>>,
+    #[serde(default)]
+    precipitation_probability: Vec<Option<f64>>,
+    #[serde(default)]
+    weather_code: Vec<Option<i32>>,
 }
 
 #[derive(Deserialize)]
 struct RespActual {
+    #[serde(default)]
+    time: Option<String>,
     temperature_2m: f64,
     apparent_temperature: f64,
     relative_humidity_2m: f64,
@@ -149,6 +176,35 @@ pub fn interpretar_prevision(json: &str) -> Result<(Actual, Vec<Dia>), String> {
         }
     }
     Ok((actual, dias))
+}
+
+/// Las próximas 24 horas desde la hora actual (`current.time`, local de la ciudad).
+/// Sin `hourly` devuelve una lista vacía; sin hora actual parte del principio.
+pub fn interpretar_horas(json: &str) -> Vec<Hora> {
+    let Ok(r) = serde_json::from_str::<RespPrevision>(json) else {
+        return vec![];
+    };
+    let Some(h) = r.hourly else {
+        return vec![];
+    };
+    // «2026-11-16T12:15» -> «2026-11-16T12»: las horas se comparan como texto ISO
+    let desde = r
+        .current
+        .and_then(|c| c.time)
+        .map(|t| t.chars().take(13).collect::<String>())
+        .unwrap_or_default();
+    h.time
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t.chars().take(13).collect::<String>() >= desde)
+        .take(24)
+        .map(|(i, t)| Hora {
+            hora: t.clone(),
+            temperatura: h.temperature_2m.get(i).copied().flatten(),
+            prob_lluvia: h.precipitation_probability.get(i).copied().flatten(),
+            codigo: h.weather_code.get(i).copied().flatten().unwrap_or(-1),
+        })
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -208,7 +264,7 @@ fn obtener(url: &str, consulta: &[(&str, String)]) -> Result<String, String> {
     resp.text().map_err(|_| "No se pudo leer la respuesta".to_string())
 }
 
-fn descargar_prevision(c: &Ciudad) -> Result<(Actual, Vec<Dia>), String> {
+fn descargar_prevision(c: &Ciudad) -> Result<(Actual, Vec<Dia>, Vec<Hora>), String> {
     let json = obtener(
         "https://api.open-meteo.com/v1/forecast",
         &[
@@ -222,11 +278,13 @@ fn descargar_prevision(c: &Ciudad) -> Result<(Actual, Vec<Dia>), String> {
                 "daily",
                 "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max".into(),
             ),
+            ("hourly", "temperature_2m,precipitation_probability,weather_code".into()),
             ("timezone", "auto".into()),
             ("forecast_days", "5".into()),
         ],
     )?;
-    interpretar_prevision(&json)
+    let (actual, dias) = interpretar_prevision(&json)?;
+    Ok((actual, dias, interpretar_horas(&json)))
 }
 
 #[tauri::command]
@@ -317,9 +375,10 @@ pub fn actualizar(app: &AppHandle) {
             let mut e = m.0.lock().unwrap();
             e.cargando = false;
             match resultado {
-                Ok((actual, dias)) => {
+                Ok((actual, dias, horas)) => {
                     e.actual = Some(actual);
                     e.dias = dias;
+                    e.por_horas = horas;
                     e.actualizado = Some(Utc::now());
                     e.error = None;
                     guardar_cache(&app, &e);
@@ -395,6 +454,39 @@ mod pruebas {
         assert_eq!(dias[1].minima, None);
         assert_eq!(dias[1].icono, "sol");
         assert!(interpretar_prevision("{}").is_err());
+    }
+
+    #[test]
+    fn lee_las_proximas_24_horas() {
+        // 48 horas desde el 16 a las 00:00; el actual es las 12:15
+        let horas: Vec<String> = (0..48)
+            .map(|i| format!("\"2026-11-{:02}T{:02}:00\"", 16 + i / 24, i % 24))
+            .collect();
+        let temps: Vec<String> = (0..48).map(|i| if i == 13 { "null".into() } else { format!("{}.5", i) }).collect();
+        let json = format!(
+            r#"{{"current": {{"time": "2026-11-16T12:15", "temperature_2m": 11.0,
+              "apparent_temperature": 9.0, "relative_humidity_2m": 70, "weather_code": 3,
+              "wind_speed_10m": 5.0, "is_day": 1}},
+              "hourly": {{"time": [{}], "temperature_2m": [{}],
+              "precipitation_probability": [{}], "weather_code": [{}]}}}}"#,
+            horas.join(","),
+            temps.join(","),
+            vec!["40"; 48].join(","),
+            vec!["61"; 48].join(","),
+        );
+        let h = interpretar_horas(&json);
+        assert_eq!(h.len(), 24);
+        assert_eq!(h[0].hora, "2026-11-16T12:00");
+        assert_eq!(h[0].temperatura, Some(12.5));
+        assert_eq!(h[1].temperatura, None);
+        assert_eq!(h[0].prob_lluvia, Some(40.0));
+        assert_eq!(h[0].codigo, 61);
+        assert_eq!(h[23].hora, "2026-11-17T11:00");
+        // Sin `hourly` (o con la caché antigua) no hay horas
+        assert!(interpretar_horas(PREVISION).is_empty());
+        // La caché antigua, sin `por_horas`, sigue leyéndose
+        let viejo: EstadoMeteo = serde_json::from_str(r#"{"ciudad":null,"actual":null,"dias":[],"actualizado":null,"cargando":false,"error":null}"#).unwrap();
+        assert!(viejo.por_horas.is_empty());
     }
 
     #[test]

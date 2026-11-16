@@ -32,6 +32,8 @@ pub fn run() {
             config::abrir_carpeta_datos,
             ventanas::alternar_panel,
             ventanas::ocultar_panel,
+            ventanas::ajustar_mini,
+            ventanas::ir_a_evento,
             sistema::muestra_sistema,
             calendario::estado_calendario,
             calendario::sincronizar_calendario,

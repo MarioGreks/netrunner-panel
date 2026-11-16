@@ -8,6 +8,7 @@
   <body class="pestana-body">
     <div id="mini" class="mini" title="Abrir panel">
       <div class="mini__in">
+       <div id="cont" class="mini__cont">
         <div class="mini__fila">
           <div class="mini__reloj"><span id="hm">--:--</span><span id="seg" class="mini__seg">--</span></div>
           <div id="meteo" class="mini__meteo"></div>
@@ -17,10 +18,12 @@
           <span class="mini__etiqueta">SYS//CLK</span>
         </div>
         <div id="prox" class="mini__prox"><i id="prox-cat" class="mini__cuadrado"></i><span id="prox-texto">SIN EVENTOS</span></div>
-        <div id="cuenta" class="mini__cuenta" hidden>
+        <div id="cuenta" class="mini__cuenta" data-evid="" hidden>
           <span id="cuenta-titulo" class="mini__cuenta-titulo"></span>
           <span id="cuenta-valor" class="mini__cuenta-valor"></span>
         </div>
+        <div id="otras" class="mini__otras" hidden></div>
+       </div>
       </div>
     </div>
     <script type="module" src="/src/tab.ts"></script>

@@ -31,6 +31,10 @@ export const obtenerConfig = () => invoke<Config>("get_config");
 export const guardarConfig = (config: Config) => invoke<void>("set_config", { config });
 export const alternarPanel = () => invoke<void>("alternar_panel");
 export const ocultarPanel = () => invoke<void>("ocultar_panel");
+/** Fija el alto lógico de la miniventana (Rust lo limita a 96-220 y la recoloca). */
+export const ajustarMini = (alto: number) => invoke<void>("ajustar_mini", { alto });
+/** Abre el panel y le pide ir a un evento de la agenda (pestaña METEO). */
+export const irAEventoPanel = (id: string) => invoke<void>("ir_a_evento", { id });
 /** Devuelve la ruta de los datos locales; con `abrir` también abre la carpeta en el Explorador. */
 export const abrirCarpetaDatos = (abrir: boolean) => invoke<string>("abrir_carpeta_datos", { abrir });
 
@@ -121,10 +125,20 @@ export interface DiaMeteo {
   icono: string;
 }
 
+export interface HoraMeteo {
+  /** AAAA-MM-DDTHH:MM, hora local de la ciudad */
+  hora: string;
+  temperatura: number | null;
+  prob_lluvia: number | null;
+  codigo: number;
+}
+
 export interface EstadoMeteo {
   ciudad: Ciudad | null;
   actual: ActualMeteo | null;
   dias: DiaMeteo[];
+  /** Próximas 24 horas (vacío con una caché antigua) */
+  por_horas?: HoraMeteo[];
   actualizado: string | null;
   cargando: boolean;
   error: string | null;
@@ -213,6 +227,7 @@ export type EventoPanel =
   | "panel://mostrar"
   | "panel://ocultar"
   | "panel://ajustes"
+  | "panel://ir_evento"
   | "config://cambio"
   | "tema://cambio"
   | "sistema://muestra"

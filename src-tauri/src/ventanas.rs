@@ -15,8 +15,11 @@ use crate::estado::Estado;
 
 const ANCHO_PANEL: f64 = 420.0;
 const PANEL_SUPERIOR: (f64, f64) = (760.0, 480.0);
-/// Miniventana del borde (ancho, alto) en píxeles lógicos.
-const MINI: (f64, f64) = (220.0, 96.0);
+/// Ancho lógico de la miniventana del borde. Su alto es dinámico (`ajustar_mini`).
+const MINI_ANCHO: f64 = 220.0;
+/// Límites del alto lógico de la miniventana.
+pub const MINI_ALTO_MIN: f64 = 96.0;
+const MINI_ALTO_MAX: f64 = 220.0;
 /// Separación (lógica) entre la miniventana y la barra de tareas en los bordes laterales.
 const MARGEN_MINI: f64 = 8.0;
 const MARGEN_BORDE: f64 = 2.0;
@@ -50,11 +53,12 @@ fn calcular(app: &AppHandle, borde: Borde) -> Option<Geometria> {
     let (aw, ah) = (area.size.width as i32, area.size.height as i32);
 
     let fisico = |v: f64| redondear(v * k).max(1) as u32;
+    let alto_mini = *app.state::<Estado>().alto_mini.lock().unwrap();
 
     let (panel, pestana) = match borde {
         Borde::Right | Borde::Left => {
             let pw = fisico(ANCHO_PANEL);
-            let (tw, th) = (fisico(MINI.0), fisico(MINI.1));
+            let (tw, th) = (fisico(MINI_ANCHO), fisico(alto_mini));
             let x = if borde == Borde::Right { ax + aw - pw as i32 } else { ax };
             let tx = if borde == Borde::Right { ax + aw - tw as i32 } else { ax };
             (
@@ -70,7 +74,7 @@ fn calcular(app: &AppHandle, borde: Borde) -> Option<Geometria> {
         Borde::Top => {
             let (pw, ph) = (fisico(PANEL_SUPERIOR.0), fisico(PANEL_SUPERIOR.1));
             // Arriba la miniventana va centrada y pegada al borde superior
-            let (tw, th) = (fisico(MINI.0), fisico(MINI.1));
+            let (tw, th) = (fisico(MINI_ANCHO), fisico(alto_mini));
             (
                 (PhysicalPosition::new(ax + (aw - pw as i32) / 2, ay), PhysicalSize::new(pw, ph)),
                 (
@@ -102,6 +106,44 @@ pub fn reposicionar(app: &AppHandle) {
         aplicar(app, "panel", g.panel);
         aplicar(app, "tab", g.pestana);
     }
+}
+
+/// Recoloca solo la miniventana (tras cambiar su alto).
+fn reposicionar_mini(app: &AppHandle) {
+    let borde = app.state::<Estado>().config.lock().unwrap().edge;
+    if let Some(g) = calcular(app, borde) {
+        aplicar(app, "tab", g.pestana);
+    }
+}
+
+/// Fija el alto lógico de la miniventana (entre 96 y 220 px). En los bordes laterales
+/// crece hacia arriba, con el borde inferior fijo; en el superior, hacia abajo.
+#[tauri::command]
+pub fn ajustar_mini(app: AppHandle, alto: f64) {
+    if !alto.is_finite() {
+        return;
+    }
+    let alto = alto.round().clamp(MINI_ALTO_MIN, MINI_ALTO_MAX);
+    {
+        let estado = app.state::<Estado>();
+        let mut actual = estado.alto_mini.lock().unwrap();
+        if *actual == alto {
+            return;
+        }
+        *actual = alto;
+    }
+    reposicionar_mini(&app);
+}
+
+/// Abre el panel y le pide ir a un evento de la agenda (METEO). Lo usa la miniventana.
+#[tauri::command]
+pub fn ir_a_evento(app: AppHandle, id: String) {
+    mostrar_panel(&app);
+    // El panel debe haber procesado `panel://mostrar` antes de recibir el id
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(180));
+        let _ = app.emit("panel://ir_evento", id);
+    });
 }
 
 /// Estado inicial: miniventana visible, panel oculto (nunca se muestra el panel al arrancar).

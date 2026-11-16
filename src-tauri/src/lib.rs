@@ -27,6 +27,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             config::get_config,
             config::set_config,
+            config::abrir_carpeta_datos,
             ventanas::alternar_panel,
             ventanas::ocultar_panel,
             sistema::muestra_sistema,

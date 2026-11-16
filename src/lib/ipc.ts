@@ -25,6 +25,8 @@ export const obtenerConfig = () => invoke<Config>("get_config");
 export const guardarConfig = (config: Config) => invoke<void>("set_config", { config });
 export const alternarPanel = () => invoke<void>("alternar_panel");
 export const ocultarPanel = () => invoke<void>("ocultar_panel");
+/** Devuelve la ruta de los datos locales; con `abrir` también abre la carpeta en el Explorador. */
+export const abrirCarpetaDatos = (abrir: boolean) => invoke<string>("abrir_carpeta_datos", { abrir });
 
 export interface Disco {
   nombre: string;

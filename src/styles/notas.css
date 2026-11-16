@@ -81,12 +81,7 @@
 .nts__input::placeholder { color: var(--amarillo); opacity: 0.7; letter-spacing: 0.1em; }
 .nts__input--linea { padding: 2px var(--esp-1); }
 
-.nts__etiqueta { margin-bottom: var(--esp-1); font-family: var(--fuente-titulo); font-size: var(--tam-xs); letter-spacing: 0.14em; color: var(--texto-tenue); }
-.nts__carpeta { margin-bottom: var(--esp-2); font-size: var(--tam-xs); color: var(--cian); word-break: break-all; }
-.nts__fila { display: flex; flex-wrap: wrap; gap: var(--esp-2); }
-.nts__aviso { min-height: 1em; margin-top: var(--esp-2); font-size: var(--tam-xs); color: var(--amarillo); }
-.nts__aviso--error, .nts__error { color: var(--rojo); }
-.nts__error { font-size: var(--tam-xs); letter-spacing: 0.06em; }
+.nts__error { color: var(--rojo); font-size: var(--tam-xs); letter-spacing: 0.06em; }
 .nts__vacio { padding: var(--esp-3) 0; text-align: center; font-size: var(--tam-xs); letter-spacing: 0.16em; color: var(--texto-tenue); }
 
 /* Tareas */

@@ -112,6 +112,35 @@ pub fn set_config(app: AppHandle, estado: State<Estado>, config: Config) -> Resu
     Ok(())
 }
 
+/// Devuelve la ruta de los datos locales (`app_data_dir()`), creándola si falta.
+/// Con `abrir` también la abre en el Explorador con ShellExecuteW; así la interfaz no
+/// necesita ningún permiso de shell ni de rutas.
+#[tauri::command]
+pub fn abrir_carpeta_datos(app: AppHandle, abrir: bool) -> Result<String, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    if abrir {
+        use windows::core::{w, HSTRING, PCWSTR};
+        use windows::Win32::UI::Shell::ShellExecuteW;
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        let h = unsafe {
+            ShellExecuteW(
+                None,
+                w!("open"),
+                &HSTRING::from(dir.as_os_str()),
+                PCWSTR::null(),
+                PCWSTR::null(),
+                SW_SHOWNORMAL,
+            )
+        };
+        // Éxito si el valor devuelto es mayor que 32
+        if h.0 as isize <= 32 {
+            return Err("No se pudo abrir la carpeta".into());
+        }
+    }
+    Ok(dir.to_string_lossy().into_owned())
+}
+
 #[cfg(test)]
 mod pruebas {
     use super::*;

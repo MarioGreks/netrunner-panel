@@ -27,11 +27,16 @@ html[data-borde="top"] .cuerpo.oculto { transform: translateY(-100%); }
     opacity 220ms cubic-bezier(0.4, 0, 1, 1);
 }
 
+/* Cabecera: nombre, hora y engranaje, y debajo una franja con datos y el wireframe */
 .cabecera {
+  flex: none;
+  padding: var(--esp-3) var(--esp-4) var(--esp-2);
+}
+.cabecera__fila {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  padding: var(--esp-4) var(--esp-4) var(--esp-3);
+  gap: var(--esp-2);
 }
 .cabecera__nombre {
   font-family: var(--fuente-titulo);
@@ -40,11 +45,65 @@ html[data-borde="top"] .cuerpo.oculto { transform: translateY(-100%); }
   letter-spacing: 0.12em;
   color: var(--amarillo);
   text-shadow: 0 0 8px var(--amarillo-tenue);
+  white-space: nowrap;
 }
+.cabecera__der { display: flex; align-items: center; gap: var(--esp-2); }
 .cabecera__hora {
   font-size: var(--tam-s);
   color: var(--cian);
 }
+.cabecera__ajustes {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: 1px solid var(--cian-tenue);
+  color: var(--cian);
+  cursor: pointer;
+}
+.cabecera__ajustes:hover { background: var(--cian-suave); border-color: var(--cian); }
+.cabecera__ajustes--activo { color: var(--fondo); background: var(--amarillo); border-color: var(--amarillo); }
+.cabecera__ajustes--activo:hover { background: var(--amarillo); border-color: var(--amarillo); }
+
+.franja {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 52px;
+  margin-top: var(--esp-2);
+  border-top: 1px solid var(--amarillo-suave);
+  border-bottom: 1px solid var(--amarillo-suave);
+}
+.franja__datos { display: flex; flex-direction: column; gap: 3px; }
+.franja__micro {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+  text-transform: uppercase;
+}
+.franja__carga { display: flex; align-items: center; gap: var(--esp-2); }
+.franja__barra {
+  display: block;
+  width: 56px;
+  height: 3px;
+  background:
+    repeating-linear-gradient(90deg, var(--amarillo) 0 4px, transparent 4px 6px) 0 0 / 66% 100% no-repeat,
+    var(--amarillo-suave);
+}
+.franja__wire { width: 150px; height: 100%; display: block; }
+
+.enlace {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.18em;
+  color: var(--texto-tenue);
+}
+.enlace__punto { font-style: normal; color: var(--cian-tenue); }
+.enlace--activo { color: var(--cian); }
+.enlace--activo .enlace__punto { color: var(--cian); animation: enlace-parpadeo 0.5s steps(1) infinite; }
+@keyframes enlace-parpadeo { 50% { opacity: 0.15; } }
 
 .contenido {
   flex: 1;
@@ -81,4 +140,101 @@ html[data-borde="top"] .cuerpo.oculto { transform: translateY(-100%); }
   border-top-color: var(--amarillo);
   background: var(--amarillo-suave);
   filter: drop-shadow(0 0 4px var(--amarillo-tenue));
+}
+
+/* Pie: banda diagonal fina con la versión */
+.pie {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--esp-2);
+  height: 14px;
+  padding-right: var(--esp-3);
+  border-top: 1px solid var(--amarillo-suave);
+}
+.pie__banda {
+  flex: 1;
+  height: 100%;
+  background: repeating-linear-gradient(-45deg, var(--amarillo-tenue) 0 3px, transparent 3px 7px);
+  clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  opacity: 0.7;
+}
+.pie__texto {
+  font-size: 8px;
+  letter-spacing: 0.16em;
+  color: var(--texto-tenue);
+  white-space: pre;
+}
+
+/* Pestañas: con AJUSTES abierto ninguna se marca como activa */
+.pestanas--ajustes .pestana--activa {
+  color: var(--texto-tenue);
+  border-top-color: transparent;
+  background: none;
+  filter: none;
+}
+
+/* --- Animación de entrada (~400 ms), solo al abrir --- */
+.escaneo {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 56px;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(to bottom, transparent, var(--cian-suave));
+  border-bottom: 1px solid var(--cian);
+  box-shadow: 0 6px 14px var(--cian-tenue);
+}
+.entrando .escaneo { animation: escaneo 400ms cubic-bezier(0.3, 0.1, 0.5, 1) both; }
+@keyframes escaneo {
+  0% { transform: translateY(-100%); opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0; }
+}
+
+/* Glitch de 3 fotogramas sobre el título: desplazamiento RGB amarillo/cian */
+.entrando .cabecera__nombre { animation: glitch 270ms steps(1, end) 70ms both; }
+@keyframes glitch {
+  0% {
+    transform: translateX(-3px);
+    text-shadow: -3px 0 var(--cian), 3px 0 var(--amarillo);
+    clip-path: inset(0 0 55% 0);
+  }
+  33% {
+    transform: translateX(3px);
+    text-shadow: 3px 0 var(--cian), -3px 0 var(--amarillo);
+    clip-path: inset(40% 0 0 0);
+  }
+  66% {
+    transform: translateX(-1px);
+    text-shadow: -2px 0 var(--cian), 2px 0 var(--amarillo);
+    clip-path: none;
+  }
+  100% {
+    transform: none;
+    text-shadow: 0 0 8px var(--amarillo-tenue);
+    clip-path: none;
+  }
+}
+
+/* Marcos del módulo activo: aparecen escalonados (--i lo pone main.ts) */
+.entrando .contenido .marco {
+  animation: marco-entra 220ms ease-out both;
+  animation-delay: calc(var(--i, 0) * 40ms + 60ms);
+}
+@keyframes marco-entra {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Sin movimiento: solo un fundido corto, sin deslizamiento, glitch ni escalonado */
+@media (prefers-reduced-motion: reduce) {
+  .cuerpo,
+  .cuerpo.saliendo { transition: opacity 150ms linear; }
+  html[data-borde] .cuerpo.oculto { transform: none; }
+  .escaneo { display: none; }
+  .enlace--activo .enlace__punto { animation: none; }
 }

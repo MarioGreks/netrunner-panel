@@ -7,8 +7,26 @@
   box-shadow: 0 0 10px var(--amarillo), 0 0 22px var(--amarillo-tenue);
   animation: pulso 2.4s ease-in-out infinite;
 }
+/* Marcas de escala a lo largo de la tira: verticales en los lados, horizontales arriba */
+.tira::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 8px, rgba(7, 8, 12, 0.55) 8px 10px);
+}
+/* Esquinas cortadas en el lado interior (el opuesto al borde de pantalla) */
+html[data-borde="right"] .tira { clip-path: polygon(4px 0, 100% 0, 100% 100%, 4px 100%, 0 calc(100% - 4px), 0 4px); }
+html[data-borde="left"] .tira { clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%); }
+html[data-borde="top"] .tira { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 3px), calc(100% - 4px) 100%, 4px 100%, 0 calc(100% - 3px)); }
+html[data-borde="top"] .tira::after {
+  background: repeating-linear-gradient(to right, transparent 0 8px, rgba(7, 8, 12, 0.55) 8px 10px);
+}
 @keyframes pulso {
   0%, 100% { opacity: 0.55; }
   50% { opacity: 1; }
 }
 .tira:hover { animation-play-state: paused; opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .tira { animation: none; opacity: 0.85; }
+}

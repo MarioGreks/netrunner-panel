@@ -5,6 +5,7 @@
   "windows": ["panel", "tab"],
   "permissions": [
     "core:event:default",
+    "core:app:allow-version",
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-set-position",

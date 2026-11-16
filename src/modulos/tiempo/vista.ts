@@ -1,17 +1,15 @@
 // Módulo TIEMPO: reloj, tiempo meteorológico (Open-Meteo) y agenda (ICS de Outlook).
 import {
   alEvento,
-  buscarCiudad,
   estadoCalendario,
   estadoMeteo,
-  guardarConfig,
   obtenerConfig,
   sincronizarCalendario,
-  type Ciudad,
   type EstadoCalendario,
   type EstadoMeteo,
   type EventoCalendario,
 } from "../../lib/ipc";
+import { abrirAjustes } from "../../lib/navegacion";
 
 const DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
@@ -101,27 +99,7 @@ export function montar(contenedor: HTMLElement): void {
         <div class="tmp__hora" data-id="hora">--:--:--</div>
         <div class="tmp__fecha" data-id="fecha"></div>
       </div>
-      <button class="tmp__engranaje" data-id="engranaje" type="button" title="Configurar" aria-label="Configurar el módulo">${ENGRANAJE}</button>
-
-      <section class="marco tmp__config" data-id="config" hidden>
-        <div class="marco__cabecera"><span>CONFIGURACIÓN</span></div>
-        <div class="marco__cuerpo">
-          <label class="tmp__etiqueta" for="tmp-ics">URL ICS DEL CALENDARIO</label>
-          <div class="tmp__fila">
-            <input id="tmp-ics" class="tmp__input" data-id="ics" type="password" autocomplete="off" spellcheck="false" placeholder="https://… o webcal://…" />
-            <button class="tmp__btn" data-id="ics-ver" type="button">VER</button>
-          </div>
-          <div class="tmp__fila tmp__fila--der">
-            <button class="tmp__btn tmp__btn--peligro" data-id="ics-borrar" type="button">BORRAR</button>
-            <button class="tmp__btn tmp__btn--ok" data-id="ics-guardar" type="button">GUARDAR</button>
-          </div>
-          <label class="tmp__etiqueta" for="tmp-ciudad">CIUDAD</label>
-          <div class="tmp__actual" data-id="ciudad-actual"></div>
-          <input id="tmp-ciudad" class="tmp__input" data-id="ciudad" type="text" autocomplete="off" spellcheck="false" placeholder="Buscar ciudad…" />
-          <ul class="tmp__resultados" data-id="resultados"></ul>
-          <div class="tmp__aviso" data-id="config-aviso"></div>
-        </div>
-      </section>
+      <button class="tmp__engranaje" data-id="engranaje" type="button" title="Ajustes del calendario" aria-label="Abrir los ajustes">${ENGRANAJE}</button>
 
       ${marco("METEO", `<span class="marco__etiqueta" data-id="meteo-hace"></span>`, "", "marco--cian", "meteo")}
       ${marco(
@@ -138,12 +116,6 @@ export function montar(contenedor: HTMLElement): void {
   const raiz = q("hora");
   const hora = raiz;
   const fecha = q("fecha");
-  const config = q("config");
-  const campoIcs = q<HTMLInputElement>("ics");
-  const campoCiudad = q<HTMLInputElement>("ciudad");
-  const resultados = q<HTMLUListElement>("resultados");
-  const aviso = q("config-aviso");
-  const ciudadActual = q("ciudad-actual");
   const cuerpoMeteo = q("meteo-cuerpo");
   const meteoHace = q("meteo-hace");
   const cuerpoAgenda = q("agenda-cuerpo");
@@ -155,21 +127,7 @@ export function montar(contenedor: HTMLElement): void {
   let agenda: EstadoCalendario | null = null;
   let tieneUrl = false;
 
-  const abrirConfig = async () => {
-    config.hidden = false;
-    try {
-      const c = await obtenerConfig();
-      campoIcs.value = c.ics_url ?? "";
-      ciudadActual.textContent = c.ciudad ? `ACTUAL: ${c.ciudad.nombre}, ${c.ciudad.pais}`.toUpperCase() : "SIN CIUDAD";
-    } catch {
-      /* se deja el formulario como está */
-    }
-    config.scrollIntoView({ block: "nearest" });
-  };
-  q("engranaje").addEventListener("click", () => {
-    if (config.hidden) void abrirConfig();
-    else config.hidden = true;
-  });
+  q("engranaje").addEventListener("click", () => abrirAjustes("calendario"));
 
   // --- Reloj ---
   const pintarReloj = () => {
@@ -183,7 +141,7 @@ export function montar(contenedor: HTMLElement): void {
     const m = meteo;
     meteoHace.textContent = m?.actualizado ? hace(m.actualizado) : "";
     if (!m || !m.ciudad) {
-      cuerpoMeteo.innerHTML = `<div class="tmp__vacio">SIN CIUDAD CONFIGURADA<button class="tmp__btn" data-accion="config" type="button">CONFIGURAR</button></div>`;
+      cuerpoMeteo.innerHTML = `<div class="tmp__vacio">SIN CIUDAD CONFIGURADA<button class="tmp__btn" data-accion="meteo" type="button">CONFIGURAR</button></div>`;
       return;
     }
     const a = m.actual;
@@ -230,7 +188,7 @@ export function montar(contenedor: HTMLElement): void {
     giro.classList.toggle("tmp__giro--activo", !!s?.sincronizando);
     agendaHace.textContent = tieneUrl || s?.ultima_sync ? hace(s?.ultima_sync ?? null) : "";
     if (!tieneUrl) {
-      cuerpoAgenda.innerHTML = `<div class="tmp__vacio">SIN CALENDARIO CONFIGURADO<button class="tmp__btn" data-accion="config" type="button">CONFIGURAR</button></div>`;
+      cuerpoAgenda.innerHTML = `<div class="tmp__vacio">SIN CALENDARIO CONFIGURADO<button class="tmp__btn" data-accion="calendario" type="button">CONFIGURAR</button></div>`;
       return;
     }
     let html = s?.error ? `<div class="tmp__error">${esc(s.error)}</div>` : "";
@@ -265,88 +223,15 @@ export function montar(contenedor: HTMLElement): void {
     cuerpoAgenda.innerHTML = html;
   };
 
-  // Los botones «CONFIGURAR» de los marcos vacíos abren el formulario
+  // Los botones «CONFIGURAR» de los marcos vacíos llevan a su sección de AJUSTES
   contenedor.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest('[data-accion="config"]')) void abrirConfig();
+    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-accion]");
+    if (b?.dataset.accion === "meteo") abrirAjustes("meteo");
+    else if (b?.dataset.accion === "calendario") abrirAjustes("calendario");
   });
   q("sync").addEventListener("click", () => {
-    if (!tieneUrl) return void abrirConfig();
+    if (!tieneUrl) return abrirAjustes("calendario");
     void sincronizarCalendario();
-  });
-
-  // --- Configuración: se lee y se guarda conservando los demás campos ---
-  const mostrarAviso = (texto: string, error = false) => {
-    aviso.textContent = texto;
-    aviso.classList.toggle("tmp__aviso--error", error);
-  };
-  const guardarCambio = async (cambio: (c: Awaited<ReturnType<typeof obtenerConfig>>) => void) => {
-    try {
-      const c = await obtenerConfig();
-      cambio(c);
-      await guardarConfig(c);
-      return true;
-    } catch {
-      mostrarAviso("No se pudo guardar la configuración", true);
-      return false;
-    }
-  };
-
-  q("ics-ver").addEventListener("click", (e) => {
-    const visible = campoIcs.type === "text";
-    campoIcs.type = visible ? "password" : "text";
-    (e.currentTarget as HTMLElement).textContent = visible ? "VER" : "OCULTAR";
-  });
-  q("ics-guardar").addEventListener("click", async () => {
-    const url = campoIcs.value.trim();
-    if (!url) return mostrarAviso("Escribe una URL o usa BORRAR", true);
-    if (!/^(https?|webcals?):\/\//i.test(url)) return mostrarAviso("La URL debe empezar por https:// o webcal://", true);
-    if (await guardarCambio((c) => (c.ics_url = url))) mostrarAviso("Calendario guardado. Sincronizando…");
-  });
-  q("ics-borrar").addEventListener("click", async () => {
-    campoIcs.value = "";
-    if (await guardarCambio((c) => (c.ics_url = null))) mostrarAviso("Calendario eliminado");
-  });
-
-  let temporizador = 0;
-  let busqueda = 0;
-  const buscar = async () => {
-    const texto = campoCiudad.value.trim();
-    const mia = ++busqueda;
-    if (texto.length < 2) {
-      resultados.replaceChildren();
-      return;
-    }
-    try {
-      const lista = await buscarCiudad(texto);
-      if (mia !== busqueda || !vivo) return;
-      resultados.replaceChildren(
-        ...lista.map((c: Ciudad) => {
-          const li = document.createElement("li");
-          const b = document.createElement("button");
-          b.type = "button";
-          b.className = "tmp__resultado";
-          b.textContent = `${c.nombre}${c.pais ? `, ${c.pais}` : ""}`;
-          b.addEventListener("click", async () => {
-            if (await guardarCambio((cfg) => (cfg.ciudad = c))) {
-              ciudadActual.textContent = `ACTUAL: ${c.nombre}, ${c.pais}`.toUpperCase();
-              resultados.replaceChildren();
-              campoCiudad.value = "";
-              mostrarAviso("Ciudad guardada");
-            }
-          });
-          li.appendChild(b);
-          return li;
-        }),
-      );
-      if (lista.length === 0) mostrarAviso("Sin resultados", true);
-      else mostrarAviso("");
-    } catch (e) {
-      if (mia === busqueda) mostrarAviso(typeof e === "string" ? e : "No se pudo buscar la ciudad", true);
-    }
-  };
-  campoCiudad.addEventListener("input", () => {
-    clearTimeout(temporizador);
-    temporizador = window.setTimeout(() => void buscar(), 350);
   });
 
   // --- Ciclo de vida ---
@@ -356,7 +241,6 @@ export function montar(contenedor: HTMLElement): void {
     if (!vivo) return;
     vivo = false;
     clearInterval(intervalo);
-    clearTimeout(temporizador);
     suscripciones.forEach((u) => u());
   };
   const comprobar = () => {

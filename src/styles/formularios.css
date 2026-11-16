@@ -1,0 +1,64 @@
+/* Formularios compartidos (src/ui/formularios.ts): botones, campos, avisos y resultados. */
+.fm { display: flex; flex-direction: column; }
+.fm__etiqueta {
+  display: block;
+  margin: var(--esp-2) 0 var(--esp-1);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+.fm > .fm__etiqueta:first-child { margin-top: 0; }
+.fm__fila { display: flex; gap: var(--esp-2); margin-top: var(--esp-2); }
+.fm__fila--der { justify-content: flex-end; }
+.fm__fila--envolver { flex-wrap: wrap; }
+
+.fm__input {
+  flex: 1;
+  min-width: 0;
+  padding: var(--esp-2);
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-s);
+  color: var(--texto);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--cian-tenue);
+  outline: none;
+  user-select: text;
+}
+.fm__input:focus { border-color: var(--cian); }
+.fm__input--ancho { width: 100%; flex: none; }
+
+.fm__btn {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  padding: var(--esp-1) var(--esp-3);
+  background: none;
+  color: var(--cian);
+  border: 1px solid var(--cian-tenue);
+  cursor: pointer;
+}
+.fm__btn:hover { background: var(--cian-suave); border-color: var(--cian); }
+.fm__btn--ok { color: var(--amarillo); border-color: var(--amarillo-tenue); }
+.fm__btn--ok:hover { background: var(--amarillo-suave); border-color: var(--amarillo); }
+.fm__btn--peligro { color: var(--rojo); border-color: rgba(255, 42, 77, 0.4); }
+.fm__btn--peligro:hover { background: rgba(255, 42, 77, 0.12); border-color: var(--rojo); }
+
+.fm__actual { margin-bottom: var(--esp-2); font-size: var(--tam-xs); color: var(--cian); }
+.fm__ruta { font-size: var(--tam-xs); color: var(--cian); word-break: break-all; user-select: text; }
+.fm__resultados { list-style: none; margin-top: var(--esp-1); }
+.fm__resultado {
+  width: 100%;
+  text-align: left;
+  padding: var(--esp-2);
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-s);
+  color: var(--texto);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--cian-suave);
+  cursor: pointer;
+}
+.fm__resultado:hover { background: var(--cian-suave); color: var(--cian); }
+.fm__aviso { min-height: 1em; margin-top: var(--esp-2); font-size: var(--tam-xs); color: var(--amarillo); }
+.fm__aviso--error { color: var(--rojo); }

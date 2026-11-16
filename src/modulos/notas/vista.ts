@@ -1,22 +1,17 @@
 // Módulo NOTAS: tareas y notas rápidas, guardadas en local con sincronización
 // opcional con una carpeta de OneDrive.
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   alEvento,
   borrarNota,
   borrarTarea,
-  carpetaOnedrive,
   estadoNotas,
-  guardarConfig,
   guardarNota,
   guardarTarea,
-  obtenerConfig,
-  sincronizarNotas,
   type EstadoNotas,
   type Nota,
   type Tarea,
 } from "../../lib/ipc";
-import { bloqueo } from "../../lib/bloqueo";
+import { abrirAjustes } from "../../lib/navegacion";
 
 const esc = (t: string) =>
   t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -46,22 +41,8 @@ export function montar(contenedor: HTMLElement): void {
           <button class="nts__seg" data-id="seg-notas" type="button" role="tab">NOTAS</button>
         </div>
         <span class="nts__sync" data-id="sync">${NUBE}<span data-id="sync-texto"></span></span>
-        <button class="nts__engranaje" data-id="engranaje" type="button" title="Configurar" aria-label="Configurar el módulo">${ENGRANAJE}</button>
+        <button class="nts__engranaje" data-id="engranaje" type="button" title="Ajustes de sincronización" aria-label="Abrir los ajustes">${ENGRANAJE}</button>
       </div>
-
-      <section class="marco nts__config" data-id="config" hidden>
-        <div class="marco__cabecera"><span>SINCRONIZACIÓN</span></div>
-        <div class="marco__cuerpo">
-          <div class="nts__etiqueta">CARPETA DE ONEDRIVE</div>
-          <div class="nts__carpeta" data-id="carpeta"></div>
-          <div class="nts__fila">
-            <button class="nts__btn" data-id="elegir" type="button">ELEGIR CARPETA</button>
-            <button class="nts__btn nts__btn--peligro" data-id="desactivar" type="button">DESACTIVAR</button>
-            <button class="nts__btn nts__btn--ok" data-id="ahora" type="button">SINCRONIZAR AHORA</button>
-          </div>
-          <div class="nts__aviso" data-id="aviso"></div>
-        </div>
-      </section>
 
       <div class="nts__error" data-id="error" hidden></div>
       <div class="nts__vista" data-id="vista"></div>
@@ -73,9 +54,6 @@ export function montar(contenedor: HTMLElement): void {
   const segNotas = q("seg-notas");
   const sync = q("sync");
   const syncTexto = q("sync-texto");
-  const config = q("config");
-  const carpetaEl = q("carpeta");
-  const aviso = q("aviso");
   const errorEl = q("error");
 
   let vivo = true;
@@ -137,7 +115,6 @@ export function montar(contenedor: HTMLElement): void {
       syncTexto.textContent = est.ultima_sync ? hace(est.ultima_sync) : "PENDIENTE";
       sync.title = "Sincronizado con OneDrive";
     }
-    carpetaEl.textContent = est.carpeta_sync ?? "SIN CARPETA (SOLO LOCAL)";
   };
 
   // --- TAREAS ---
@@ -466,46 +443,7 @@ export function montar(contenedor: HTMLElement): void {
   segTareas.addEventListener("click", () => cambiarPestana("tareas"));
   segNotas.addEventListener("click", () => cambiarPestana("notas"));
 
-  // --- Configuración de la sincronización ---
-  const mostrarAviso = (texto: string, error = false) => {
-    aviso.textContent = texto;
-    aviso.classList.toggle("nts__aviso--error", error);
-  };
-  const cambiarCarpeta = async (carpeta: string | null) => {
-    try {
-      const c = await obtenerConfig();
-      c.carpeta_sync = carpeta;
-      await guardarConfig(c);
-      est = await estadoNotas();
-      pintarSync();
-      mostrarAviso(carpeta ? "Carpeta guardada. Sincronizando…" : "Sincronización desactivada");
-    } catch {
-      mostrarAviso("No se pudo guardar la configuración", true);
-    }
-  };
-  q("engranaje").addEventListener("click", () => {
-    config.hidden = !config.hidden;
-    if (!config.hidden) config.scrollIntoView({ block: "nearest" });
-  });
-  q("elegir").addEventListener("click", async () => {
-    try {
-      const inicio = est.carpeta_sync ?? (await carpetaOnedrive()) ?? undefined;
-      // El selector nativo roba el foco: se avisa para que el panel no se oculte
-      bloqueo.dialogoAbierto = true;
-      const elegida = await open({ directory: true, multiple: false, defaultPath: inicio, title: "Carpeta de OneDrive para las notas" });
-      if (typeof elegida === "string" && elegida) await cambiarCarpeta(elegida);
-    } catch {
-      mostrarAviso("No se pudo abrir el selector de carpetas", true);
-    } finally {
-      bloqueo.dialogoAbierto = false;
-    }
-  });
-  q("desactivar").addEventListener("click", () => void cambiarCarpeta(null));
-  q("ahora").addEventListener("click", () => {
-    if (!est.carpeta_sync) return mostrarAviso("Elige antes una carpeta", true);
-    mostrarAviso("");
-    void sincronizarNotas();
-  });
+  q("engranaje").addEventListener("click", () => abrirAjustes("notas"));
 
   // --- Estado entrante ---
   const recibir = (s: EstadoNotas) => {

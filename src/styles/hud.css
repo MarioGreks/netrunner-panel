@@ -25,6 +25,22 @@
 }
 .marco--cian { --color-marco: var(--cian); }
 
+/* Micro-etiqueta en la esquina inferior de cada marco: «OS_SYSTEM // 0x3F», con un
+   contador hexadecimal por vista (los marcos ocultos no cuentan). */
+.contenido { counter-reset: marco 62; }
+.marco { counter-increment: marco; }
+.marco::after {
+  content: "OS_SYSTEM // 0x" counter(marco, upper-hexadecimal);
+  position: absolute;
+  left: var(--esp-2);
+  bottom: 3px;
+  font-size: 8px;
+  letter-spacing: 0.14em;
+  color: var(--amarillo-tenue);
+  pointer-events: none;
+}
+.marco--cian::after { color: var(--cian-tenue); }
+
 .marco__cabecera {
   display: flex;
   align-items: center;

@@ -17,6 +17,8 @@ const ANCHO_PANEL: f64 = 420.0;
 const PANEL_SUPERIOR: (f64, f64) = (760.0, 480.0);
 const PESTANA: (f64, f64) = (8.0, 140.0);
 const MARGEN_BORDE: f64 = 2.0;
+/// Fracción central del borde que abre el panel (0.6 = el 60 % del medio).
+const ZONA_CENTRAL: f64 = 0.6;
 const SONDEO: Duration = Duration::from_millis(60);
 const ESPERA_APERTURA: Duration = Duration::from_millis(250);
 /// Tiempo con el cursor fuera del panel antes de cerrarlo (evita cierres por un roce).
@@ -165,8 +167,12 @@ fn en_zona_de_borde(g: &Geometria, borde: Borde, cx: f64, cy: f64) -> bool {
     let (pp, ps) = g.panel;
     let (izq, der) = (mp.x as f64, mp.x as f64 + ms.width as f64);
     let arriba = mp.y as f64;
-    let (px0, px1) = (pp.x as f64, pp.x as f64 + ps.width as f64);
-    let (py0, py1) = (pp.y as f64, pp.y as f64 + ps.height as f64);
+    // Solo el tramo central (ZONA_CENTRAL del lado del panel) abre: así las esquinas,
+    // donde están la X de las ventanas maximizadas y el reloj, no lo disparan.
+    let margen_x = ps.width as f64 * (1.0 - ZONA_CENTRAL) / 2.0;
+    let margen_y = ps.height as f64 * (1.0 - ZONA_CENTRAL) / 2.0;
+    let (px0, px1) = (pp.x as f64 + margen_x, pp.x as f64 + ps.width as f64 - margen_x);
+    let (py0, py1) = (pp.y as f64 + margen_y, pp.y as f64 + ps.height as f64 - margen_y);
     match borde {
         Borde::Right => cx >= der - 1.0 - MARGEN_BORDE && cx < der + 1.0 && cy >= py0 && cy < py1,
         Borde::Left => cx <= izq + MARGEN_BORDE && cx >= izq - 1.0 && cy >= py0 && cy < py1,

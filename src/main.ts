@@ -138,4 +138,4 @@ alEvento("panel://ocultar", () => {
 alEvento<Borde>("config://cambio", aplicarBorde);
 
 obtenerConfig().then((c) => aplicarBorde(c.edge));
-activar("sistema");
+activar("tiempo");

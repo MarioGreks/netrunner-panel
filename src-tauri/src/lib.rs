@@ -94,7 +94,8 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|ventana, evento| {
-            if ventana.label() == "panel" {
+            // Los eventos de ventana pueden llegar antes de que `setup` registre el estado
+            if ventana.label() == "panel" && ventana.app_handle().try_state::<Estado>().is_some() {
                 if let WindowEvent::Focused(false) = evento {
                     ventanas::pedir_ocultar(ventana.app_handle());
                 }

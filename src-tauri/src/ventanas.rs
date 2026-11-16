@@ -189,7 +189,10 @@ pub fn ocultar_panel_ya(app: &AppHandle) {
 
 /// Pide al frontend que haga la animación de salida.
 pub fn pedir_ocultar(app: &AppHandle) {
-    if app.state::<Estado>().panel_visible.load(Ordering::SeqCst) {
+    // Puede llamarse desde un evento de ventana (foco) que llega antes de que
+    // `setup` registre el estado: en ese caso no hay nada que ocultar.
+    let Some(estado) = app.try_state::<Estado>() else { return };
+    if estado.panel_visible.load(Ordering::SeqCst) {
         let _ = app.emit("panel://ocultar", ());
     }
 }

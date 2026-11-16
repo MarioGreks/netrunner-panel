@@ -82,3 +82,36 @@
 .cta__detalle--error { color: var(--alerta); }
 .cta__confirma { align-self: center; font-size: var(--tam-xs); color: var(--alerta); }
 .fm__btn:disabled { opacity: 0.4; cursor: default; background: none; }
+
+/* Chips editables (remitentes VIP y palabras clave) */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--esp-1);
+  padding: var(--esp-1);
+  background: var(--velo);
+  border: 1px solid var(--cian-tenue);
+}
+.chips:focus-within { border-color: var(--cian); }
+.chips__campo { flex: 1 1 8em; border: none; background: none; padding: var(--esp-1); }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--esp-1);
+  max-width: 100%;
+  padding: 1px 2px 1px var(--esp-2);
+  font-size: var(--tam-xs);
+  color: var(--secundario);
+  background: var(--secundario-suave);
+  border: 1px solid var(--secundario-tenue);
+}
+.chip__t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip__x {
+  padding: 0 var(--esp-1);
+  font-size: var(--tam-xs);
+  color: var(--texto-tenue);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.chip__x:hover { color: var(--alerta); }

@@ -2,6 +2,7 @@
 //! `#[serde(default)]` permite añadir campos sin romper archivos antiguos.
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
@@ -67,6 +68,14 @@ pub struct Config {
     pub ms_client_id: Option<String>,
     /// Cuentas Microsoft conectadas (sin tokens).
     pub cuentas_ms: Vec<CuentaMs>,
+    /// Lanzar el Outlook clásico minimizado al arrancar si no está abierto.
+    pub outlook_auto: bool,
+    /// Remitentes VIP: dirección exacta (`ana@example.com`) o dominio (`@example.com`, `example.com`).
+    pub correo_vip: Vec<String>,
+    /// Palabras clave del asunto o del remitente (sin distinguir mayúsculas ni acentos).
+    pub correo_palabras: Vec<String>,
+    /// Etiqueta elegida para cada cuenta de Outlook (de `DisplayName` a etiqueta).
+    pub etiquetas_cuentas_correo: HashMap<String, String>,
 }
 
 pub const OPACIDAD_MIN: f64 = 0.55;
@@ -86,6 +95,10 @@ impl Default for Config {
             borde_pausado: false,
             ms_client_id: None,
             cuentas_ms: Vec::new(),
+            outlook_auto: true,
+            correo_vip: Vec::new(),
+            correo_palabras: Vec::new(),
+            etiquetas_cuentas_correo: HashMap::new(),
         }
     }
 }
@@ -98,7 +111,27 @@ impl Config {
         } else {
             OPACIDAD_DEFECTO
         };
+        limpiar_lista(&mut self.correo_vip);
+        limpiar_lista(&mut self.correo_palabras);
+        self.etiquetas_cuentas_correo.retain(|k, v| {
+            *v = v.trim().to_string();
+            !k.trim().is_empty() && !v.is_empty()
+        });
     }
+}
+
+/// Quita espacios y vacíos y elimina repetidos (sin distinguir mayúsculas), conservando el orden.
+fn limpiar_lista(lista: &mut Vec<String>) {
+    let mut vistos: Vec<String> = Vec::new();
+    lista.retain_mut(|t| {
+        *t = t.trim().to_string();
+        let clave = t.to_lowercase();
+        if t.is_empty() || vistos.contains(&clave) {
+            return false;
+        }
+        vistos.push(clave);
+        true
+    });
 }
 
 fn ruta(app: &AppHandle) -> Option<PathBuf> {
@@ -175,6 +208,15 @@ pub fn set_config(app: AppHandle, estado: State<Estado>, mut config: Config) -> 
     }
     if anterior.carpeta_sync != config.carpeta_sync {
         crate::notas::sincronizar(&app);
+    }
+    if !anterior.outlook_auto && config.outlook_auto {
+        crate::outlook::activar_auto(&app);
+    }
+    if anterior.correo_vip != config.correo_vip
+        || anterior.correo_palabras != config.correo_palabras
+        || anterior.etiquetas_cuentas_correo != config.etiquetas_cuentas_correo
+    {
+        crate::outlook::refiltrar(&app);
     }
     Ok(())
 }
@@ -268,6 +310,30 @@ mod pruebas {
         assert_eq!(c.cuentas_ms[0].etiqueta, "");
         let json = serde_json::to_string(&c).unwrap();
         assert!(!json.contains("token"));
+    }
+
+    #[test]
+    fn config_antigua_sin_campos_de_correo() {
+        let c: Config = serde_json::from_str(r#"{"edge":"left","ics_url":"https://example.com/a.ics"}"#).unwrap();
+        assert!(c.outlook_auto);
+        assert!(c.correo_vip.is_empty() && c.correo_palabras.is_empty());
+        assert!(c.etiquetas_cuentas_correo.is_empty());
+        let c: Config = serde_json::from_str(r#"{"outlook_auto":false,"correo_vip":["@example.com"],"etiquetas_cuentas_correo":{"Cuenta A":"UNI"}}"#).unwrap();
+        assert!(!c.outlook_auto);
+        assert_eq!(c.correo_vip, vec!["@example.com"]);
+        assert_eq!(c.etiquetas_cuentas_correo["Cuenta A"], "UNI");
+    }
+
+    #[test]
+    fn normalizar_limpia_listas_de_correo() {
+        let mut c = Config::default();
+        c.correo_vip = vec![" A@example.com ".into(), "a@EXAMPLE.com".into(), "".into(), "example.org".into()];
+        c.etiquetas_cuentas_correo.insert("X".into(), "  ".into());
+        c.etiquetas_cuentas_correo.insert("Y".into(), " UNI ".into());
+        c.normalizar();
+        assert_eq!(c.correo_vip, vec!["A@example.com", "example.org"]);
+        assert_eq!(c.etiquetas_cuentas_correo.len(), 1);
+        assert_eq!(c.etiquetas_cuentas_correo["Y"], "UNI");
     }
 
     #[test]

@@ -1,0 +1,158 @@
+/* Módulo CORREO: correos importantes del Outlook clásico. Solo variables de tema. */
+.crr {
+  --cat-4: color-mix(in srgb, var(--primario) 55%, var(--secundario));
+  --cat-5: color-mix(in srgb, var(--secundario) 55%, var(--alerta));
+}
+
+.crr__der { display: flex; align-items: center; gap: var(--esp-2); }
+.crr__estado {
+  font-family: var(--fuente-titulo);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  color: var(--texto-tenue);
+}
+.crr__estado--conectado { color: var(--primario); }
+.crr__estado--conectando { color: var(--secundario); }
+.crr__estado--error { color: var(--alerta); }
+
+.crr__icono {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--cian-tenue);
+  color: var(--cian);
+  font-size: var(--tam-s);
+  line-height: 1;
+  cursor: pointer;
+}
+.crr__icono:hover { background: var(--cian-suave); border-color: var(--cian); }
+.crr__giro { display: inline-block; }
+.crr__giro--activo { animation: crr-giro 0.9s linear infinite; }
+@keyframes crr-giro { to { transform: rotate(360deg); } }
+
+.crr__lista { display: flex; flex-direction: column; }
+
+/* Un correo */
+.crr__item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: var(--esp-2) var(--esp-2);
+  text-align: left;
+  font-family: var(--fuente-datos);
+  color: var(--texto);
+  background: none;
+  border: 1px solid transparent;
+  border-bottom-color: var(--linea-neutra);
+  cursor: pointer;
+}
+.crr__item:hover { background: var(--secundario-suave); border-color: var(--cian-tenue); }
+.crr__item--abriendo { opacity: 0.6; }
+.crr__fila { display: flex; align-items: center; gap: var(--esp-2); min-width: 0; }
+.crr__cuenta {
+  flex: none;
+  max-width: 70px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--fuente-titulo);
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  color: var(--cat);
+}
+.crr__rem {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: var(--tam-s);
+  color: var(--texto-tenue);
+}
+.crr__rem-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crr__item--nuevo .crr__rem { color: var(--texto); font-weight: 700; }
+.crr__punto {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--primario);
+  box-shadow: 0 0 6px var(--primario-tenue);
+}
+.crr__motivo {
+  flex: none;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 5px;
+  font-family: var(--fuente-titulo);
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 14px;
+  color: var(--secundario);
+  border: 1px solid var(--secundario-tenue);
+  background: var(--secundario-suave);
+}
+.crr__hora { flex: none; font-size: var(--tam-xs); color: var(--texto-tenue); }
+.crr__asunto {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--tam-s);
+  line-height: 1.35;
+  color: var(--texto);
+}
+.crr__item--nuevo .crr__asunto { color: var(--primario); }
+.crr__frag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--tam-xs);
+  color: var(--texto-tenue);
+  opacity: 0.8;
+}
+
+/* Vacíos y avisos */
+.crr__vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--esp-3);
+  padding: var(--esp-4) var(--esp-2);
+  text-align: center;
+}
+.crr__vacio-t {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.16em;
+  color: var(--texto-tenue);
+}
+.crr__vacio-p { font-size: var(--tam-xs); color: var(--texto-tenue); opacity: 0.8; }
+.crr__btn {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  padding: var(--esp-1) var(--esp-3);
+  background: none;
+  color: var(--primario);
+  border: 1px solid var(--primario-tenue);
+  cursor: pointer;
+}
+.crr__btn:hover:not(:disabled) { background: var(--primario-suave); border-color: var(--primario); }
+.crr__btn:disabled { opacity: 0.5; cursor: default; }
+.crr__error {
+  margin-bottom: var(--esp-2);
+  padding: var(--esp-1) var(--esp-2);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.08em;
+  color: var(--alerta);
+  border: 1px solid var(--alerta-tenue);
+  background: var(--alerta-suave);
+}

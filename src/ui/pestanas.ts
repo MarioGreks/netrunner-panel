@@ -1,17 +1,29 @@
 // Pestañas bajo la cabecera, estilo carpeta: la activa es un bloque macizo con la esquina cortada
-// que se desliza bajo el texto. Teclas 1-4 cambian de pestaña.
+// que se desliza bajo el texto. Teclas 1-5 cambian de pestaña.
 export interface Pestana {
   id: string;
   nombre: string;
 }
 
 export const PESTANAS: Pestana[] = [
-  // Orden de la v1.1: tiempo/meteo, accesos, notas, sistema (teclas 1-4 en este orden)
+  // Orden: tiempo/meteo, correo, accesos, notas, sistema (teclas 1-5 en este orden)
   { id: "tiempo", nombre: "METEO" },
+  { id: "correo", nombre: "CORREO" },
   { id: "accesos", nombre: "ACCESOS" },
   { id: "notas", nombre: "NOTAS" },
   { id: "sistema", nombre: "SISTEMA" },
 ];
+
+const botonesPorId = new Map<string, HTMLButtonElement>();
+
+/** Contador pequeño sobre la pestaña (p. ej. correos importantes sin leer); 0 lo oculta. */
+export function fijarContador(id: string, n: number): void {
+  const c = botonesPorId.get(id)?.querySelector<HTMLElement>(".pestana__cont");
+  if (!c) return;
+  c.hidden = n <= 0;
+  c.textContent = n > 99 ? "99+" : String(n);
+  botonesPorId.get(id)!.title = `${PESTANAS.find((p) => p.id === id)?.nombre} (${PESTANAS.findIndex((p) => p.id === id) + 1})${n > 0 ? ` · ${n} sin leer` : ""}`;
+}
 
 export function montarPestanas(
   barra: HTMLElement,
@@ -50,10 +62,11 @@ export function montarPestanas(
     const b = document.createElement("button");
     b.className = "pestana";
     b.title = `${p.nombre} (${i + 1})`;
-    b.innerHTML = `<small class="pestana__num">0${i + 1}</small><span>${p.nombre}</span>`;
+    b.innerHTML = `<small class="pestana__num">0${i + 1}</small><span>${p.nombre}</span><b class="pestana__cont" hidden></b>`;
     b.addEventListener("click", () => activar(p.id));
     barra.appendChild(b);
     botones.set(p.id, b);
+    botonesPorId.set(p.id, b);
   });
 
   // Reajusta el indicador si cambia el ancho o se cargan las fuentes

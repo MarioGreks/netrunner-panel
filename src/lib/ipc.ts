@@ -29,6 +29,14 @@ export interface Config {
   ms_client_id: string | null;
   /** Cuentas Microsoft conectadas (sin tokens); las gestiona Rust. */
   cuentas_ms: unknown[];
+  /** Abrir el Outlook clásico minimizado al arrancar si no está abierto. */
+  outlook_auto: boolean;
+  /** Remitentes VIP: dirección exacta o dominio (`@uah.es`, `uah.es`). */
+  correo_vip: string[];
+  /** Palabras clave del asunto o del remitente. */
+  correo_palabras: string[];
+  /** Etiqueta de cada cuenta de Outlook (de DisplayName a etiqueta). */
+  etiquetas_cuentas_correo: Record<string, string>;
 }
 
 export const obtenerConfig = () => invoke<Config>("get_config");
@@ -244,6 +252,52 @@ export const desconectarCuentaMs = (id: string) => invoke<void>("desconectar_cue
 export const renombrarCuentaMs = (id: string, etiqueta: string) => invoke<void>("renombrar_cuenta_ms", { id, etiqueta });
 export const probarCuentaMs = (id: string) => invoke<string>("probar_cuenta_ms", { id });
 
+export type EstadoOutlook = "conectado" | "cerrado" | "conectando" | "error";
+
+export interface CorreoImportante {
+  id: string;
+  store_id: string;
+  /** Etiqueta de la cuenta (la del usuario o el DisplayName). */
+  cuenta: string;
+  remitente: string;
+  direccion: string;
+  asunto: string;
+  /** RFC 3339 con el desfase local */
+  recibido: string;
+  no_leido: boolean;
+  fragmento: string;
+  /** «VIP» o la palabra clave que coincidió */
+  motivo: string;
+}
+
+export interface EstadoCorreo {
+  estado: EstadoOutlook;
+  detalle: string;
+  correos: CorreoImportante[];
+  ultima_sync: string | null;
+  /** DisplayName de las cuentas detectadas en Outlook. */
+  cuentas: string[];
+}
+
+export const estadoCorreo = () => invoke<EstadoCorreo>("estado_correo");
+export const sincronizarCorreo = () => invoke<void>("sincronizar_correo");
+export const abrirCorreo = (entryId: string, storeId: string) => invoke<void>("abrir_correo", { entryId, storeId });
+/** Lanza el Outlook clásico minimizado (una vez). */
+export const abrirOutlook = () => invoke<void>("abrir_outlook");
+export const categoriasOutlook = () => invoke<string[]>("categorias_outlook");
+
+export interface NuevoEvento {
+  titulo: string;
+  /** Hora local `AAAA-MM-DDTHH:MM` */
+  inicio: string;
+  fin: string;
+  todo_el_dia: boolean;
+  ubicacion: string | null;
+  categorias: string[];
+}
+
+export const crearEvento = (evento: NuevoEvento) => invoke<void>("crear_evento", { evento });
+
 export type EventoPanel =
   | "panel://mostrar"
   | "panel://ocultar"
@@ -258,7 +312,8 @@ export type EventoPanel =
   | "meteo://estado"
   | "notas://estado"
   | "musica://estado"
-  | "accesos://estado";
+  | "accesos://estado"
+  | "correo://estado";
 
 export const alEvento = <T = unknown>(
   evento: EventoPanel,

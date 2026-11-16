@@ -6,13 +6,14 @@ import "./styles/sistema.css";
 import "./styles/tiempo.css";
 import "./styles/notas.css";
 import "./styles/accesos.css";
+import "./styles/correo.css";
 import "./styles/formularios.css";
 import "./styles/ajustes.css";
-import { alEvento, obtenerConfig, ocultarPanel, type Borde } from "./lib/ipc";
+import { alEvento, estadoCorreo, obtenerConfig, ocultarPanel, type Borde, type EstadoCorreo } from "./lib/ipc";
 import { iniciarTema } from "./lib/tema";
 import { bloqueo } from "./lib/bloqueo";
 import { alAbrirAjustes, pedirIrAEvento, type SeccionAjustes } from "./lib/navegacion";
-import { montarPestanas } from "./ui/pestanas";
+import { fijarContador, montarPestanas } from "./ui/pestanas";
 import { montarEnlace } from "./ui/enlace";
 import { montarResumen } from "./ui/resumen";
 import { getVersion } from "@tauri-apps/api/app";
@@ -20,11 +21,13 @@ import { montar as montarSistema } from "./modulos/sistema/vista";
 import { montar as montarTiempo } from "./modulos/tiempo/vista";
 import { montar as montarNotas } from "./modulos/notas/vista";
 import { montar as montarAccesos } from "./modulos/accesos/vista";
+import { montar as montarCorreo } from "./modulos/correo/vista";
 import { montar as montarAjustes } from "./modulos/ajustes/vista";
 
 const MODULOS: Record<string, (c: HTMLElement) => void> = {
   sistema: montarSistema,
   tiempo: montarTiempo,
+  correo: montarCorreo,
   notas: montarNotas,
   accesos: montarAccesos,
 };
@@ -160,6 +163,11 @@ alEvento<string>("panel://ir_evento", (id) => {
   if (cerrarAjustes || idActual !== "tiempo") activar("tiempo");
   pedirIrAEvento(id);
 });
+
+// Contador de correos importantes sin leer en la pestaña CORREO
+const pintarContador = (e: EstadoCorreo) => fijarContador("correo", e.correos.filter((c) => c.no_leido).length);
+alEvento<EstadoCorreo>("correo://estado", pintarContador);
+estadoCorreo().then(pintarContador).catch(() => {});
 
 alEvento<Borde>("config://cambio", aplicarBorde);
 

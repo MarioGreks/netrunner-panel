@@ -1,4 +1,4 @@
-// Formularios de configuración reutilizables (URL ICS, ciudad y carpeta de OneDrive).
+// Formularios de configuración reutilizables (URL ICS, ciudad, carpeta de OneDrive, correo y cuentas).
 // Todos leen la configuración, cambian solo su campo y la guardan con `set_config`
 // conservando el resto. Los usa la pantalla AJUSTES.
 import { open } from "@tauri-apps/plugin-dialog";
@@ -8,10 +8,12 @@ import {
   carpetaOnedrive,
   conectarCuentaMs,
   desconectarCuentaMs,
+  estadoCorreo,
   estadoCuentasMs,
   probarCuentaMs,
   renombrarCuentaMs,
   type CuentaMs,
+  type EstadoCorreo,
   guardarConfig,
   obtenerConfig,
   sincronizarNotas,
@@ -426,6 +428,183 @@ export function formularioCuentasMs(): Formulario {
     }
   });
   conectar.addEventListener("click", () => void iniciarSesion());
+
+  return {
+    el,
+    destruir: () => {
+      vivo = false;
+      desescuchar?.();
+    },
+  };
+}
+
+// --- Correo (Outlook clásico): arranque, VIP, palabras clave y etiquetas de cuenta ---
+
+/** Campo de chips: lista editable con ✕ en cada chip y un campo que añade con Enter. */
+function editorChips(placeholder: string, etiquetaAria: string, alCambiar: (lista: string[]) => Promise<void>) {
+  const el = document.createElement("div");
+  el.className = "chips";
+  const campo = document.createElement("input");
+  campo.className = "fm__input chips__campo";
+  campo.type = "text";
+  campo.placeholder = placeholder;
+  campo.autocomplete = "off";
+  campo.spellcheck = false;
+  campo.setAttribute("aria-label", etiquetaAria);
+  let valores: string[] = [];
+
+  const pintar = () => {
+    el.querySelectorAll(".chip").forEach((c) => c.remove());
+    valores.forEach((v) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      const t = document.createElement("span");
+      t.className = "chip__t";
+      t.textContent = v;
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "chip__x";
+      x.textContent = "✕";
+      x.setAttribute("aria-label", `Quitar ${v}`);
+      x.addEventListener("click", () => void cambiar(valores.filter((o) => o !== v)));
+      chip.append(t, x);
+      el.insertBefore(chip, campo);
+    });
+  };
+  const cambiar = async (nuevos: string[]) => {
+    const antes = valores;
+    valores = nuevos;
+    pintar();
+    try {
+      await alCambiar(nuevos);
+    } catch {
+      valores = antes;
+      pintar();
+    }
+  };
+  campo.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const t = campo.value.trim();
+    if (!t) return;
+    campo.value = "";
+    if (!valores.some((v) => v.toLowerCase() === t.toLowerCase())) void cambiar([...valores, t]);
+  });
+  el.addEventListener("click", (e) => {
+    if (e.target === el) campo.focus();
+  });
+  el.appendChild(campo);
+  return {
+    el,
+    poner: (v: string[]) => {
+      valores = [...v];
+      pintar();
+    },
+  };
+}
+
+export function formularioCorreo(): Formulario {
+  const el = crear(`
+    <label class="ajs__casilla ajs__casilla--primera">
+      <input type="checkbox" data-id="auto" />
+      <span class="ajs__marca" aria-hidden="true"></span>
+      <span>Abrir Outlook clásico minimizado al arrancar <span class="fm__ayuda">(ocupa ~150-250 MB de RAM)</span></span>
+    </label>
+    <div class="fm__etiqueta">REMITENTES VIP</div>
+    <div data-id="vip"></div>
+    <div class="fm__ayuda">Dirección exacta (ana@example.com) o dominio (@example.com). Enter para añadir.</div>
+    <div class="fm__etiqueta">PALABRAS CLAVE</div>
+    <div data-id="palabras"></div>
+    <div class="fm__ayuda">En el asunto o en el nombre del remitente, sin distinguir mayúsculas ni acentos.</div>
+    <div class="fm__etiqueta">CUENTAS DETECTADAS</div>
+    <div class="cta" data-id="cuentas"></div>
+    <div class="fm__ayuda" data-id="sin-cuentas">Se detectan con Outlook abierto.</div>
+    <div class="fm__aviso"></div>`);
+  const aviso = avisador(el);
+  const auto = q<HTMLInputElement>(el, "auto");
+  const guardar = async (cambio: (c: Config) => void) => {
+    try {
+      await actualizarConfig(cambio);
+      aviso("");
+    } catch {
+      aviso("No se pudo guardar la configuración", true);
+      throw new Error("config");
+    }
+  };
+  const vip = editorChips("@uah.es o ana@example.com", "Añadir remitente VIP", (l) => guardar((c) => (c.correo_vip = l)));
+  const palabras = editorChips("examen, urgente…", "Añadir palabra clave", (l) => guardar((c) => (c.correo_palabras = l)));
+  q(el, "vip").appendChild(vip.el);
+  q(el, "palabras").appendChild(palabras.el);
+
+  const listaCuentas = q(el, "cuentas");
+  const sinCuentas = q(el, "sin-cuentas");
+  let cuentas: string[] = [];
+  let etiquetas: Record<string, string> = {};
+  let vivo = true;
+
+  const pintarCuentas = () => {
+    if (!vivo) return;
+    const activo = document.activeElement;
+    if (activo instanceof HTMLInputElement && listaCuentas.contains(activo)) return; // no pisar una edición
+    sinCuentas.hidden = cuentas.length > 0;
+    listaCuentas.replaceChildren(
+      ...cuentas.map((nombre) => {
+        const fila = document.createElement("div");
+        fila.className = "cta__cuenta";
+        const n = document.createElement("div");
+        n.className = "cta__correo";
+        n.textContent = nombre;
+        const campo = document.createElement("input");
+        campo.className = "fm__input cta__etiqueta";
+        campo.maxLength = 24;
+        campo.placeholder = "Etiqueta";
+        campo.value = etiquetas[nombre] ?? "";
+        campo.setAttribute("aria-label", `Etiqueta de ${nombre}`);
+        campo.addEventListener("change", () => {
+          const t = campo.value.trim();
+          if (t) etiquetas[nombre] = t;
+          else delete etiquetas[nombre];
+          void guardar((c) => {
+            if (t) c.etiquetas_cuentas_correo[nombre] = t;
+            else delete c.etiquetas_cuentas_correo[nombre];
+          }).catch(() => {});
+        });
+        campo.addEventListener("focusout", () => setTimeout(pintarCuentas, 0));
+        campo.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") campo.blur();
+        });
+        fila.append(n, campo);
+        return fila;
+      }),
+    );
+  };
+
+  obtenerConfig()
+    .then((c) => {
+      auto.checked = c.outlook_auto;
+      vip.poner(c.correo_vip ?? []);
+      palabras.poner(c.correo_palabras ?? []);
+      etiquetas = { ...(c.etiquetas_cuentas_correo ?? {}) };
+      pintarCuentas();
+    })
+    .catch(() => {});
+  estadoCorreo()
+    .then((e) => {
+      cuentas = e.cuentas;
+      pintarCuentas();
+    })
+    .catch(() => {});
+  let desescuchar: (() => void) | null = null;
+  void alEvento<EstadoCorreo>("correo://estado", (e) => {
+    cuentas = e.cuentas;
+    pintarCuentas();
+  }).then((un) => {
+    if (vivo) desescuchar = un;
+    else un();
+  });
+  auto.addEventListener("change", () => {
+    void guardar((c) => (c.outlook_auto = auto.checked)).catch(() => (auto.checked = !auto.checked));
+  });
 
   return {
     el,

@@ -8,6 +8,7 @@ mod meteo;
 mod microsoft;
 mod musica;
 mod notas;
+mod outlook;
 mod sistema;
 mod ventanas;
 
@@ -65,6 +66,12 @@ pub fn run() {
             accesos::borrar_acceso,
             accesos::reordenar_accesos,
             accesos::abrir_acceso,
+            outlook::estado_correo,
+            outlook::sincronizar_correo,
+            outlook::abrir_correo,
+            outlook::abrir_outlook,
+            outlook::categorias_outlook,
+            outlook::crear_evento,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -81,6 +88,7 @@ pub fn run() {
             notas::iniciar(&handle);
             musica::iniciar(&handle);
             accesos::iniciar(&handle);
+            outlook::iniciar(&handle);
             bandeja::crear(&handle)?;
             ventanas::iniciar_deteccion(handle);
             Ok(())

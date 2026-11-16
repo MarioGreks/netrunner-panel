@@ -429,3 +429,63 @@
 @media (prefers-reduced-motion: reduce) {
   .tmp__detalle, .tmp__detalle-in { transition: none; }
 }
+
+/* --- «+ EVENTO»: formulario en línea encima de la agenda (crea en Outlook) --- */
+.tmp__nuevo-btn { color: var(--cian); border-color: var(--cian-tenue); white-space: nowrap; }
+.tmp__nuevo-btn:hover:not(:disabled) { background: var(--cian-suave); border-color: var(--cian); }
+.tmp__nuevo-btn:disabled { opacity: 0.45; cursor: default; }
+.tmp__nuevo {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  max-height: 330px;
+  overflow-y: auto;
+  margin-bottom: var(--esp-3);
+  padding: var(--esp-2);
+  border: 1px solid var(--cian-tenue);
+  background: var(--secundario-suave);
+}
+.tmp__campo {
+  flex: 1;
+  min-width: 0;
+  padding: var(--esp-1) var(--esp-2);
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-s);
+  color: var(--texto);
+  background: var(--velo);
+  border: 1px solid var(--cian-tenue);
+  outline: none;
+  color-scheme: dark;
+  user-select: text;
+}
+.tmp__campo:focus { border-color: var(--cian); }
+.tmp__n-fila { display: flex; align-items: center; gap: var(--esp-2); }
+.tmp__n-fila--der { justify-content: flex-end; }
+.tmp__n-todo, .tmp__n-hora {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-1);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.08em;
+  color: var(--texto-tenue);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tmp__n-hora { flex: 1; cursor: default; }
+.tmp__n-etq { display: block; margin-bottom: var(--esp-1); font-family: var(--fuente-titulo); font-size: 9px; letter-spacing: 0.18em; color: var(--texto-tenue); }
+.tmp__n-cats { display: flex; flex-wrap: wrap; gap: var(--esp-1); }
+.tmp__n-cat {
+  padding: 1px var(--esp-2);
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-xs);
+  color: var(--cat);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--cat) 45%, transparent);
+  cursor: pointer;
+}
+.tmp__n-cat[aria-pressed="true"] { color: var(--tinta); background: var(--cat); border-color: var(--cat); }
+.tmp__n-msg { min-height: 0; font-size: var(--tam-xs); letter-spacing: 0.06em; color: var(--texto-tenue); }
+.tmp__n-msg:empty { display: none; }
+.tmp__n-msg--error { color: var(--alerta); }
+.tmp__aviso--ok { color: var(--primario); border-color: var(--primario-tenue); background: var(--primario-suave); }

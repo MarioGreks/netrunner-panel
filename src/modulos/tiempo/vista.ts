@@ -1,14 +1,18 @@
 // Módulo TIEMPO: tiempo meteorológico (Open-Meteo) y agenda (ICS de Outlook).
 import {
   alEvento,
+  categoriasOutlook,
+  crearEvento,
   desmarcarCuenta,
   estadoCalendario,
+  estadoCorreo,
   estadoCuentas,
   estadoMeteo,
   marcarCuenta,
   obtenerConfig,
   sincronizarCalendario,
   type CuentaAtras,
+  type EstadoCorreo,
   type EstadoCalendario,
   type EstadoMeteo,
   type EventoCalendario,
@@ -181,9 +185,28 @@ export function montar(contenedor: HTMLElement): void {
         "AGENDA",
         `<span class="marco__etiqueta" data-id="agenda-hace"></span>
          <button class="tmp__engranaje" data-id="engranaje" type="button" title="Ajustes del calendario" aria-label="Abrir los ajustes">${ENGRANAJE}</button>
+         <button class="tmp__sync tmp__nuevo-btn" data-id="nuevo-btn" type="button" title="Comprobando Outlook…" disabled>+ EVENTO</button>
          <button class="tmp__sync tmp__hoy" data-id="hoy" type="button" title="Volver a hoy" hidden>HOY</button>
          <button class="tmp__sync" data-id="sync" type="button" title="Sincronizar ahora"><span class="tmp__giro" data-id="giro">⟳</span> SYNC</button>`,
-        `<div class="tmp__error" data-id="agenda-error" hidden></div>
+        `<form class="tmp__nuevo" data-id="nuevo" autocomplete="off" hidden>
+           <input class="tmp__campo" data-id="n-titulo" type="text" placeholder="Título" maxlength="255" aria-label="Título" />
+           <div class="tmp__n-fila">
+             <input class="tmp__campo" data-id="n-fecha" type="date" aria-label="Fecha" />
+             <label class="tmp__n-todo"><input data-id="n-todo" type="checkbox" /> Todo el día</label>
+           </div>
+           <div class="tmp__n-fila" data-id="n-horas">
+             <label class="tmp__n-hora">DE <input class="tmp__campo" data-id="n-ini" type="time" aria-label="Hora de inicio" /></label>
+             <label class="tmp__n-hora">A <input class="tmp__campo" data-id="n-fin" type="time" aria-label="Hora de fin" /></label>
+           </div>
+           <input class="tmp__campo" data-id="n-ubic" type="text" placeholder="Ubicación (opcional)" maxlength="255" aria-label="Ubicación" />
+           <div class="tmp__n-cats-caja" hidden><span class="tmp__n-etq">CATEGORÍA</span><div class="tmp__n-cats" data-id="n-cats"></div></div>
+           <div class="tmp__n-msg" data-id="n-msg" role="status"></div>
+           <div class="tmp__n-fila tmp__n-fila--der">
+             <button class="tmp__btn" data-id="n-cancelar" type="button">CANCELAR</button>
+             <button class="tmp__btn tmp__btn--ok" data-id="n-crear" type="submit">CREAR</button>
+           </div>
+         </form>
+         <div class="tmp__error" data-id="agenda-error" hidden></div>
          <div class="tmp__aviso" data-id="aviso" hidden></div>
          <div class="tmp__cuentas" data-id="cuentas" hidden></div>
          <div class="tmp__scroll" data-id="agenda-scroll"></div>`,
@@ -465,11 +488,12 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
   };
 
   let temporizadorAviso = 0;
-  const avisar = (texto: string) => {
+  const avisar = (texto: string, ok = false, ms = 3500) => {
     avisoEl.textContent = texto;
+    avisoEl.classList.toggle("tmp__aviso--ok", ok);
     avisoEl.hidden = false;
     clearTimeout(temporizadorAviso);
-    temporizadorAviso = window.setTimeout(() => (avisoEl.hidden = true), 3500);
+    temporizadorAviso = window.setTimeout(() => (avisoEl.hidden = true), ms);
   };
 
   let temporizadorDestello = 0;
@@ -543,6 +567,133 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
   q("sync").addEventListener("click", () => {
     if (!tieneUrl) return abrirAjustes("calendario");
     void sincronizarCalendario();
+  });
+
+  // --- Crear evento en Outlook (el calendario real; el ICS lo refleja en unos minutos) ---
+  const nuevoBtn = q<HTMLButtonElement>("nuevo-btn");
+  const form = q<HTMLFormElement>("nuevo");
+  const fTitulo = q<HTMLInputElement>("n-titulo");
+  const fFecha = q<HTMLInputElement>("n-fecha");
+  const fTodo = q<HTMLInputElement>("n-todo");
+  const fIni = q<HTMLInputElement>("n-ini");
+  const fFin = q<HTMLInputElement>("n-fin");
+  const fUbic = q<HTMLInputElement>("n-ubic");
+  const fCats = q("n-cats");
+  const fHoras = q("n-horas");
+  const fMsg = q("n-msg");
+  const fCrear = q<HTMLButtonElement>("n-crear");
+  let outlook: EstadoCorreo | null = null;
+  let creando = false;
+
+  const motivoOutlook = (): string | null => {
+    if (!outlook) return "Comprobando Outlook…";
+    if (outlook.estado === "conectado") return null;
+    if (outlook.estado === "cerrado") return "Outlook está cerrado: ábrelo para crear eventos";
+    if (outlook.estado === "conectando") return "Conectando con Outlook…";
+    return `Outlook no responde${outlook.detalle ? `: ${outlook.detalle}` : ""}`;
+  };
+  const pintarNuevoBtn = () => {
+    const m = motivoOutlook();
+    nuevoBtn.disabled = m !== null;
+    nuevoBtn.title = m ?? "Crear un evento en tu calendario de Outlook";
+    if (m !== null && !creando) form.hidden = true;
+  };
+
+  const fechaIso = (d: Date) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+  const mensajeForm = (texto: string, error = false) => {
+    fMsg.textContent = texto;
+    fMsg.classList.toggle("tmp__n-msg--error", error);
+  };
+  /** Error de validación del formulario, o null si se puede crear. */
+  const validarForm = (): string | null => {
+    if (!fTitulo.value.trim()) return "Escribe un título";
+    if (!fFecha.value) return "Elige una fecha";
+    if (!fTodo.checked) {
+      if (!fIni.value || !fFin.value) return "Elige la hora de inicio y de fin";
+      if (fFin.value <= fIni.value) return "La hora de fin debe ser posterior a la de inicio";
+    }
+    return null;
+  };
+  const revisarForm = () => {
+    fHoras.hidden = fTodo.checked;
+    const err = fTitulo.value.trim() ? validarForm() : null;
+    mensajeForm(err ?? "", err !== null);
+    fCrear.disabled = creando;
+  };
+
+  const pintarCategorias = (lista: string[]) => {
+    fCats.replaceChildren(
+      ...lista.map((nombre) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "tmp__n-cat";
+        b.style.setProperty("--cat", colorCategoria(nombre));
+        b.setAttribute("aria-pressed", "false");
+        b.textContent = nombre;
+        b.addEventListener("click", () => {
+          const on = b.getAttribute("aria-pressed") !== "true";
+          b.setAttribute("aria-pressed", String(on));
+        });
+        return b;
+      }),
+    );
+    fCats.parentElement!.hidden = lista.length === 0;
+  };
+
+  const abrirForm = () => {
+    // Por defecto: hoy (o mañana si la próxima hora en punto cae después de medianoche), de la próxima hora a una más
+    const ini = new Date();
+    ini.setMinutes(0, 0, 0);
+    ini.setHours(ini.getHours() + 1);
+    fTitulo.value = "";
+    fFecha.value = fechaIso(ini);
+    fTodo.checked = false;
+    fIni.value = hhmm(ini);
+    fFin.value = ini.getHours() === 23 ? "23:59" : hhmm(new Date(ini.getTime() + 3600000));
+    fUbic.value = "";
+    pintarCategorias([]);
+    mensajeForm("");
+    revisarForm();
+    form.hidden = false;
+    fTitulo.focus();
+    categoriasOutlook()
+      .then((l) => vivo && pintarCategorias(l))
+      .catch(() => {});
+  };
+  nuevoBtn.addEventListener("click", () => (form.hidden ? abrirForm() : (form.hidden = true)));
+  q("n-cancelar").addEventListener("click", () => {
+    if (!creando) form.hidden = true;
+  });
+  [fTitulo, fFecha, fTodo, fIni, fFin].forEach((c) => c.addEventListener("input", revisarForm));
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (creando) return;
+    const err = validarForm();
+    if (err) return mensajeForm(err, true);
+    creando = true;
+    fCrear.disabled = true;
+    fCrear.textContent = "CREANDO…";
+    mensajeForm("");
+    const cats = [...fCats.querySelectorAll<HTMLElement>('.tmp__n-cat[aria-pressed="true"]')].map((b) => b.textContent ?? "");
+    try {
+      await crearEvento({
+        titulo: fTitulo.value.trim(),
+        inicio: `${fFecha.value}T${fTodo.checked ? "00:00" : fIni.value}`,
+        fin: `${fFecha.value}T${fTodo.checked ? "00:00" : fFin.value}`,
+        todo_el_dia: fTodo.checked,
+        ubicacion: fUbic.value.trim() || null,
+        categorias: cats,
+      });
+      form.hidden = true;
+      avisar("Creado · aparecerá en la agenda en unos minutos", true, 8000);
+    } catch (e) {
+      mensajeForm(typeof e === "string" ? e : "No se pudo crear el evento", true);
+    } finally {
+      creando = false;
+      fCrear.textContent = "CREAR";
+      fCrear.disabled = false;
+      if (vivo) pintarNuevoBtn();
+    }
   });
 
   // --- Ciclo de vida ---
@@ -626,6 +777,13 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
   }));
   suscribir(alEvento<EstadoMeteo>("meteo://estado", recibirMeteo));
   suscribir(alEvento<CuentaAtras[]>("cuentas://estado", recibirCuentas));
+  suscribir(
+    alEvento<EstadoCorreo>("correo://estado", (e) => {
+      if (!comprobar()) return;
+      outlook = e;
+      pintarNuevoBtn();
+    }),
+  );
   suscribir(alEvento("panel://mostrar", () => {
     if (!vivo) return;
     // Al volver a abrir el panel, la agenda empieza de nuevo por HOY
@@ -640,5 +798,12 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     estadoCalendario().then(recibirAgenda).catch(() => {});
     estadoMeteo().then(recibirMeteo).catch(() => {});
     estadoCuentas().then(recibirCuentas).catch(() => {});
+    estadoCorreo()
+      .then((e) => {
+        if (!vivo) return;
+        outlook = e;
+        pintarNuevoBtn();
+      })
+      .catch(() => {});
   });
 }

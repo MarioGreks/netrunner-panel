@@ -160,3 +160,21 @@
 @media (prefers-reduced-motion: reduce) {
   .ajs__resalte { animation: none; }
 }
+
+/* Conexión directa con Microsoft: plegada por defecto */
+.ajs__avanzado { margin-top: var(--esp-4); }
+.ajs__avanzado > .marco { margin-top: var(--esp-3); }
+.ajs__avanzado-t {
+  padding: var(--esp-2) var(--esp-3);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+  border: 1px dashed var(--secundario-tenue);
+  cursor: pointer;
+  user-select: none;
+}
+.ajs__avanzado-t:hover { color: var(--texto); border-color: var(--cian); }
+.ajs__avanzado[open] > .ajs__avanzado-t { color: var(--cian); }
+.ajs__casilla--primera { margin-top: 0; align-items: flex-start; }
+.ajs__casilla--primera .ajs__marca { margin-top: 2px; }

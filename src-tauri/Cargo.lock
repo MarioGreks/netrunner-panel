@@ -2284,10 +2284,12 @@ dependencies = [
 name = "netrunner-panel"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "chrono",
  "chrono-tz",
  "iana-time-zone",
  "ical",
+ "png",
  "reqwest 0.12.28",
  "rrule",
  "serde",

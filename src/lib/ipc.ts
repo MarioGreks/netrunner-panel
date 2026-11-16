@@ -141,6 +141,45 @@ export const borrarNota = (id: string) => invoke<void>("borrar_nota", { id });
 export const carpetaOnedrive = () => invoke<string | null>("carpeta_onedrive");
 export const sincronizarNotas = () => invoke<void>("sincronizar_notas");
 
+export interface EstadoMusica {
+  titulo: string;
+  artista: string;
+  album: string;
+  origen: string;
+  reproduciendo: boolean;
+  /** Segundos */
+  posicion: number;
+  duracion: number;
+  puede_anterior: boolean;
+  puede_siguiente: boolean;
+  /** Data URL de la carátula */
+  caratula: string | null;
+}
+
+export const estadoMusica = () => invoke<EstadoMusica | null>("estado_musica");
+export const musicaAlternar = () => invoke<void>("musica_alternar");
+export const musicaSiguiente = () => invoke<void>("musica_siguiente");
+export const musicaAnterior = () => invoke<void>("musica_anterior");
+
+export type TipoAcceso = "app" | "carpeta" | "archivo" | "url";
+
+export interface Acceso {
+  id: string;
+  nombre: string;
+  destino: string;
+  tipo: TipoAcceso;
+  /** Data URL PNG; las URLs no llevan */
+  icono: string | null;
+  orden: number;
+}
+
+export const estadoAccesos = () => invoke<Acceso[]>("estado_accesos");
+export const anadirAcceso = (destino: string, tipo: TipoAcceso) => invoke<void>("anadir_acceso", { destino, tipo });
+export const renombrarAcceso = (id: string, nombre: string) => invoke<void>("renombrar_acceso", { id, nombre });
+export const borrarAcceso = (id: string) => invoke<void>("borrar_acceso", { id });
+export const reordenarAccesos = (ids: string[]) => invoke<void>("reordenar_accesos", { ids });
+export const abrirAcceso = (id: string) => invoke<void>("abrir_acceso", { id });
+
 export type EventoPanel =
   | "panel://mostrar"
   | "panel://ocultar"
@@ -148,7 +187,9 @@ export type EventoPanel =
   | "sistema://muestra"
   | "calendario://estado"
   | "meteo://estado"
-  | "notas://estado";
+  | "notas://estado"
+  | "musica://estado"
+  | "accesos://estado";
 
 export const alEvento = <T = unknown>(
   evento: EventoPanel,

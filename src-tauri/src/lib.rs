@@ -1,7 +1,9 @@
+mod accesos;
 mod calendario;
 mod config;
 mod estado;
 mod meteo;
+mod musica;
 mod notas;
 mod sistema;
 mod ventanas;
@@ -39,6 +41,16 @@ pub fn run() {
             notas::borrar_nota,
             notas::sincronizar_notas,
             notas::carpeta_onedrive,
+            musica::estado_musica,
+            musica::musica_alternar,
+            musica::musica_siguiente,
+            musica::musica_anterior,
+            accesos::estado_accesos,
+            accesos::anadir_acceso,
+            accesos::renombrar_acceso,
+            accesos::borrar_acceso,
+            accesos::reordenar_accesos,
+            accesos::abrir_acceso,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -51,6 +63,8 @@ pub fn run() {
             calendario::iniciar(&handle);
             meteo::iniciar(&handle);
             notas::iniciar(&handle);
+            musica::iniciar(&handle);
+            accesos::iniciar(&handle);
             ventanas::iniciar_deteccion(handle);
             Ok(())
         })

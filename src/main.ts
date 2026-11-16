@@ -4,6 +4,7 @@ import "./styles/panel.css";
 import "./styles/sistema.css";
 import "./styles/tiempo.css";
 import "./styles/notas.css";
+import "./styles/accesos.css";
 import { alEvento, obtenerConfig, ocultarPanel, type Borde } from "./lib/ipc";
 import { bloqueo } from "./lib/bloqueo";
 import { montarPestanas } from "./ui/pestanas";

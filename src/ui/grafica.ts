@@ -1,10 +1,11 @@
 // Gráficas HUD reutilizables, sin librerías: onda en canvas y anillo segmentado en SVG.
+import { EVENTO_TEMA } from "../lib/tema";
 
 const PUNTOS = 60;
 const SUAVIZADO = 0.25; // fracción que se acerca al valor objetivo por fotograma
 
 export interface OpcionesOnda {
-  color: string; // color CSS, p. ej. "#f5e50a" o "var(--amarillo)"
+  color: string; // color CSS, p. ej. "var(--primario)" o un hex
   max: number; // valor que corresponde a la altura completa
 }
 
@@ -19,20 +20,27 @@ export interface Onda {
 function resolverColor(canvas: HTMLElement, color: string): string {
   const m = color.match(/^var\((--[\w-]+)\)$/);
   if (!m) return color;
-  return getComputedStyle(canvas).getPropertyValue(m[1]).trim() || "#f5e50a";
+  return getComputedStyle(canvas).getPropertyValue(m[1]).trim() || getComputedStyle(canvas).color;
 }
 
-/** Convierte "#rrggbb" a rgba con alfa; para otros formatos devuelve el color tal cual. */
+/** Color de la cuadrícula (token neutro), resuelto desde el CSS. */
+function colorCuadricula(canvas: HTMLElement): string {
+  return getComputedStyle(canvas).getPropertyValue("--linea-neutra").trim() || "transparent";
+}
+
+/** Convierte "#rrggbb" a rgba con alfa; otros formatos pasan por color-mix. */
 function conAlfa(color: string, alfa: number): string {
   const m = color.match(/^#([0-9a-f]{6})$/i);
-  if (!m) return color;
+  if (!m) return `color-mix(in srgb, ${color} ${alfa * 100}%, transparent)`;
   const n = parseInt(m[1], 16);
   return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${alfa})`;
 }
 
 export function crearOnda(canvas: HTMLCanvasElement, opciones: OpcionesOnda): Onda {
   const ctx = canvas.getContext("2d")!;
-  const color = resolverColor(canvas, opciones.color);
+  // Los colores se releen al cambiar de tema (evento de ventana), no en cada fotograma
+  let color = resolverColor(canvas, opciones.color);
+  let cuadricula = colorCuadricula(canvas);
   const valores: number[] = new Array(PUNTOS).fill(0);
   // Fracción 0..1 de desplazamiento horizontal entre muestras, para el movimiento suave
   let avance = 1;
@@ -72,7 +80,7 @@ export function crearOnda(canvas: HTMLCanvasElement, opciones: OpcionesOnda): On
 
     // Cuadrícula tenue
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.06)";
+    ctx.strokeStyle = cuadricula;
     ctx.beginPath();
     for (let i = 1; i < 4; i++) {
       const y = Math.round((alto * i) / 4) + 0.5;
@@ -127,6 +135,13 @@ export function crearOnda(canvas: HTMLCanvasElement, opciones: OpcionesOnda): On
   };
   raf = requestAnimationFrame(dibujar);
 
+  const alCambiarTema = () => {
+    color = resolverColor(canvas, opciones.color);
+    cuadricula = colorCuadricula(canvas);
+    if (!raf) raf = requestAnimationFrame(dibujar);
+  };
+  window.addEventListener(EVENTO_TEMA, alCambiarTema);
+
   return {
     agregar(valor) {
       valores.push(valor);
@@ -137,6 +152,7 @@ export function crearOnda(canvas: HTMLCanvasElement, opciones: OpcionesOnda): On
     },
     destruir() {
       cancelAnimationFrame(raf);
+      window.removeEventListener(EVENTO_TEMA, alCambiarTema);
     },
   };
 }

@@ -1,4 +1,5 @@
 import "./styles/tokens.css";
+import "./styles/temas.css";
 import "./styles/hud.css";
 import "./styles/panel.css";
 import "./styles/sistema.css";
@@ -8,6 +9,7 @@ import "./styles/accesos.css";
 import "./styles/formularios.css";
 import "./styles/ajustes.css";
 import { alEvento, obtenerConfig, ocultarPanel, type Borde } from "./lib/ipc";
+import { iniciarTema } from "./lib/tema";
 import { bloqueo } from "./lib/bloqueo";
 import { alAbrirAjustes, type SeccionAjustes } from "./lib/navegacion";
 import { montarPestanas } from "./ui/pestanas";
@@ -26,6 +28,8 @@ const MODULOS: Record<string, (c: HTMLElement) => void> = {
   notas: montarNotas,
   accesos: montarAccesos,
 };
+
+iniciarTema();
 
 const panel = document.getElementById("panel")!;
 const contenido = document.getElementById("contenido")!;

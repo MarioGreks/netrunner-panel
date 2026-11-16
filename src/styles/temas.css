@@ -1,0 +1,45 @@
+/* Temas de color. Cada uno fija solo la base; los derivados se calculan en tokens.css.
+   Se escribe como [data-tema] (sin html) para que las muestras de AJUSTES, que llevan su
+   propio data-tema, también resuelvan las variables con sus colores. */
+[data-tema="netrunner"] {
+  --primario: #f5e50a;
+  --secundario: #2de2e6;
+  --alerta: #ff2a4d;
+  --fondo: #07080c;
+  --fondo-panel-rgb: 9, 11, 16;
+}
+[data-tema="neon"] {
+  --primario: #ff2bd6;
+  --secundario: #29f0ff;
+  --alerta: #ffe14d;
+  --fondo: #0a0716;
+  --fondo-panel-rgb: 14, 9, 30;
+}
+[data-tema="terminal"] {
+  --primario: #39ff7a;
+  --secundario: #b6ffd0;
+  --alerta: #ff5c39;
+  --fondo: #020804;
+  --fondo-panel-rgb: 4, 14, 8;
+}
+[data-tema="sangre"] {
+  --primario: #ff2a3d;
+  --secundario: #e9e9f2;
+  --alerta: #ffd400;
+  --fondo: #0b0405;
+  --fondo-panel-rgb: 20, 7, 9;
+}
+[data-tema="ambar"] {
+  --primario: #ffb000;
+  --secundario: #ffd98a;
+  --alerta: #ff4d2e;
+  --fondo: #0c0800;
+  --fondo-panel-rgb: 20, 13, 2;
+}
+[data-tema="hielo"] {
+  --primario: #7df9ff;
+  --secundario: #6f8cff;
+  --alerta: #ff4d6d;
+  --fondo: #050a12;
+  --fondo-panel-rgb: 8, 15, 28;
+}

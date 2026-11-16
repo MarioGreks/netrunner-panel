@@ -50,8 +50,8 @@
 .tmp__btn:hover { background: var(--cian-suave); border-color: var(--cian); }
 .tmp__btn--ok { color: var(--amarillo); border-color: var(--amarillo-tenue); }
 .tmp__btn--ok:hover { background: var(--amarillo-suave); border-color: var(--amarillo); }
-.tmp__btn--peligro { color: var(--rojo); border-color: rgba(255, 42, 77, 0.4); }
-.tmp__btn--peligro:hover { background: rgba(255, 42, 77, 0.12); border-color: var(--rojo); }
+.tmp__btn--peligro { color: var(--rojo); border-color: var(--alerta-tenue); }
+.tmp__btn--peligro:hover { background: var(--alerta-suave); border-color: var(--rojo); }
 
 .tmp__sync { padding: 2px var(--esp-2); color: var(--amarillo); border-color: var(--amarillo-tenue); }
 .tmp__sync:hover { background: var(--amarillo-suave); border-color: var(--amarillo); }
@@ -149,7 +149,7 @@
   font-family: var(--fuente-titulo);
   font-size: 9px;
   letter-spacing: 0.12em;
-  color: #000;
+  color: var(--tinta);
   background: var(--cian);
   vertical-align: middle;
 }

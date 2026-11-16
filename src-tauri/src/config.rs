@@ -42,7 +42,15 @@ pub struct Config {
     pub ciudad: Option<Ciudad>,
     /// Carpeta de OneDrive para sincronizar las notas (None = solo local).
     pub carpeta_sync: Option<String>,
+    /// Id del tema de color. Un valor desconocido se trata como «netrunner» en la interfaz.
+    pub tema: String,
+    /// Opacidad del fondo del panel, limitada a [OPACIDAD_MIN, OPACIDAD_MAX].
+    pub opacidad: f64,
 }
+
+pub const OPACIDAD_MIN: f64 = 0.55;
+pub const OPACIDAD_MAX: f64 = 1.0;
+pub const OPACIDAD_DEFECTO: f64 = 0.94;
 
 impl Default for Config {
     fn default() -> Self {
@@ -52,7 +60,20 @@ impl Default for Config {
             ics_url: None,
             ciudad: None,
             carpeta_sync: None,
+            tema: "netrunner".to_string(),
+            opacidad: OPACIDAD_DEFECTO,
         }
+    }
+}
+
+impl Config {
+    /// Deja los valores en rango (opacidad no finita = valor por defecto).
+    pub fn normalizar(&mut self) {
+        self.opacidad = if self.opacidad.is_finite() {
+            self.opacidad.clamp(OPACIDAD_MIN, OPACIDAD_MAX)
+        } else {
+            OPACIDAD_DEFECTO
+        };
     }
 }
 
@@ -64,7 +85,11 @@ fn ruta(app: &AppHandle) -> Option<PathBuf> {
 pub fn cargar(app: &AppHandle) -> Config {
     ruta(app)
         .and_then(|r| std::fs::read_to_string(r).ok())
-        .and_then(|s| serde_json::from_str(&s).ok())
+        .and_then(|s| serde_json::from_str::<Config>(&s).ok())
+        .map(|mut c| {
+            c.normalizar();
+            c
+        })
         .unwrap_or_default()
 }
 
@@ -94,12 +119,19 @@ pub fn get_config(estado: State<Estado>) -> Config {
 }
 
 #[tauri::command]
-pub fn set_config(app: AppHandle, estado: State<Estado>, config: Config) -> Result<(), String> {
+pub fn set_config(app: AppHandle, estado: State<Estado>, mut config: Config) -> Result<(), String> {
+    config.normalizar();
     guardar(&app, &config)?;
     let anterior = std::mem::replace(&mut *estado.config.lock().unwrap(), config.clone());
     sincronizar_autoarranque(&app, config.autostart);
     ventanas::reposicionar(&app);
     let _ = app.emit("config://cambio", config.edge);
+    if anterior.tema != config.tema || anterior.opacidad != config.opacidad {
+        let _ = app.emit(
+            "tema://cambio",
+            serde_json::json!({ "tema": config.tema, "opacidad": config.opacidad }),
+        );
+    }
     if anterior.ics_url != config.ics_url {
         crate::calendario::sincronizar(&app);
     }
@@ -152,6 +184,30 @@ mod pruebas {
         assert_eq!(c.edge, Borde::Right);
         assert!(c.autostart);
         assert!(c.ics_url.is_none() && c.ciudad.is_none());
+    }
+
+    #[test]
+    fn json_viejo_sin_tema_ni_opacidad_usa_los_valores_por_defecto() {
+        let c: Config = serde_json::from_str(r#"{"edge":"left","autostart":false}"#).unwrap();
+        assert_eq!(c.tema, "netrunner");
+        assert_eq!(c.opacidad, 0.94);
+        assert_eq!(c.edge, Borde::Left);
+    }
+
+    #[test]
+    fn opacidad_fuera_de_rango_se_limita() {
+        let mut c: Config = serde_json::from_str(r#"{"opacidad":0.1}"#).unwrap();
+        c.normalizar();
+        assert_eq!(c.opacidad, 0.55);
+        c.opacidad = 7.0;
+        c.normalizar();
+        assert_eq!(c.opacidad, 1.0);
+        c.opacidad = f64::NAN;
+        c.normalizar();
+        assert_eq!(c.opacidad, 0.94);
+        c.opacidad = 0.8;
+        c.normalizar();
+        assert_eq!(c.opacidad, 0.8);
     }
 
     #[test]

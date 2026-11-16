@@ -70,7 +70,7 @@
   height: 6px;
   flex: none;
   background: repeating-linear-gradient(
-    -45deg, var(--amarillo) 0 6px, #000 6px 12px
+    -45deg, var(--amarillo) 0 6px, var(--negro) 6px 12px
   );
   opacity: 0.8;
 }
@@ -83,6 +83,6 @@
   inset: 0;
   pointer-events: none;
   background: repeating-linear-gradient(
-    to bottom, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px
+    to bottom, var(--velo-fino) 0 1px, transparent 1px 3px
   );
 }

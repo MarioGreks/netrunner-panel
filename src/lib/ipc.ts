@@ -19,6 +19,10 @@ export interface Config {
   ciudad: Ciudad | null;
   /** Carpeta de OneDrive para sincronizar las notas; null = solo local. */
   carpeta_sync: string | null;
+  /** Id del tema de color; un valor desconocido se trata como «netrunner». */
+  tema: string;
+  /** Opacidad del fondo del panel, entre 0.55 y 1. */
+  opacidad: number;
 }
 
 export const obtenerConfig = () => invoke<Config>("get_config");
@@ -186,6 +190,7 @@ export type EventoPanel =
   | "panel://mostrar"
   | "panel://ocultar"
   | "config://cambio"
+  | "tema://cambio"
   | "sistema://muestra"
   | "calendario://estado"
   | "meteo://estado"

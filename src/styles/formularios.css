@@ -20,7 +20,7 @@
   font-family: var(--fuente-datos);
   font-size: var(--tam-s);
   color: var(--texto);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--velo);
   border: 1px solid var(--cian-tenue);
   outline: none;
   user-select: text;
@@ -41,8 +41,8 @@
 .fm__btn:hover { background: var(--cian-suave); border-color: var(--cian); }
 .fm__btn--ok { color: var(--amarillo); border-color: var(--amarillo-tenue); }
 .fm__btn--ok:hover { background: var(--amarillo-suave); border-color: var(--amarillo); }
-.fm__btn--peligro { color: var(--rojo); border-color: rgba(255, 42, 77, 0.4); }
-.fm__btn--peligro:hover { background: rgba(255, 42, 77, 0.12); border-color: var(--rojo); }
+.fm__btn--peligro { color: var(--rojo); border-color: var(--alerta-tenue); }
+.fm__btn--peligro:hover { background: var(--alerta-suave); border-color: var(--rojo); }
 
 .fm__actual { margin-bottom: var(--esp-2); font-size: var(--tam-xs); color: var(--cian); }
 .fm__ruta { font-size: var(--tam-xs); color: var(--cian); word-break: break-all; user-select: text; }

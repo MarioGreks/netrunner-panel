@@ -1,9 +1,10 @@
-// Pantalla AJUSTES: panel, calendario, meteo, notas y sistema. No es una pestaña de la
+// Pantalla AJUSTES: apariencia, panel, calendario, meteo, notas y sistema. No es una pestaña de la
 // barra: se abre con el engranaje de la cabecera y se cierra con VOLVER o Esc.
 import { getVersion } from "@tauri-apps/api/app";
 import { abrirCarpetaDatos, alEvento, obtenerConfig, type Borde } from "../../lib/ipc";
 import { bloqueo } from "../../lib/bloqueo";
 import type { SeccionAjustes } from "../../lib/navegacion";
+import { aplicarTema, limitarOpacidad, OPACIDAD_MAX, OPACIDAD_MIN, TEMAS, temaValido } from "../../lib/tema";
 import { actualizarConfig, formularioCarpeta, formularioCiudad, formularioIcs, type Formulario } from "../../ui/formularios";
 
 const BORDES: { valor: Borde; texto: string }[] = [
@@ -32,6 +33,7 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
         <span class="ajs__titulo">AJUSTES</span>
         <span class="ajs__esc">ESC</span>
       </div>
+      ${seccion("apariencia", "APARIENCIA", "SKIN // 0x00")}
       ${seccion("panel", "PANEL", "CFG // 0x01")}
       ${seccion("calendario", "CALENDARIO", "ICS // 0x02", "marco--cian")}
       ${seccion("meteo", "METEO", "GEO // 0x03", "marco--cian")}
@@ -43,6 +45,91 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
   const formularios: Formulario[] = [];
   const unlistens: (() => void)[] = [];
   let vivo = true;
+
+  // --- APARIENCIA: temas de color y transparencia ---
+  const cuerpoApariencia = q("apariencia");
+  cuerpoApariencia.innerHTML = `
+    <div class="fm">
+      <div class="fm__etiqueta">TEMA DE COLOR</div>
+      <div class="ajs__temas" role="radiogroup" aria-label="Tema de color">
+        ${TEMAS.map(
+          (t) => `<button class="ajs__tema" data-tema="${t.id}" type="button" role="radio" aria-checked="false">
+            <span class="ajs__tema-bloque"></span>
+            <span class="ajs__tema-linea"></span>
+            <span class="ajs__tema-nombre">${t.nombre}</span>
+            <span class="ajs__tema-activo">● ACTIVO</span>
+          </button>`,
+        ).join("")}
+      </div>
+      <div class="ajs__dato ajs__dato--slider"><label class="fm__etiqueta" for="ajs-opacidad">TRANSPARENCIA</label><span class="ajs__valor" data-id="opacidad-valor">94%</span></div>
+      <input id="ajs-opacidad" class="ajs__deslizador" data-id="opacidad" type="range" min="${Math.round(OPACIDAD_MIN * 100)}" max="${Math.round(OPACIDAD_MAX * 100)}" step="1" value="94" />
+      <div class="fm__aviso" data-id="aviso-apariencia"></div>
+    </div>`;
+  const muestras = [...cuerpoApariencia.querySelectorAll<HTMLButtonElement>(".ajs__tema")];
+  const deslizador = q<HTMLInputElement>("opacidad");
+  const valorOpacidad = q("opacidad-valor");
+  const avisoApariencia = q("aviso-apariencia");
+  let temaActual = temaValido(document.documentElement.dataset.tema);
+  let opacidadActual = limitarOpacidad(parseFloat(document.documentElement.style.getPropertyValue("--opacidad-panel")));
+
+  const marcarTema = (tema: string) => {
+    temaActual = tema;
+    muestras.forEach((m) => {
+      const activo = m.dataset.tema === tema;
+      m.classList.toggle("ajs__tema--activo", activo);
+      m.setAttribute("aria-checked", String(activo));
+    });
+  };
+  const pintarOpacidad = (o: number) => {
+    const pct = Math.round(o * 100);
+    deslizador.value = String(pct);
+    deslizador.style.setProperty("--pct", `${((pct - OPACIDAD_MIN * 100) / ((OPACIDAD_MAX - OPACIDAD_MIN) * 100)) * 100}%`);
+    valorOpacidad.textContent = `${pct}%`;
+  };
+  const falloApariencia = () => {
+    avisoApariencia.textContent = "No se pudo guardar la configuración";
+    avisoApariencia.classList.add("fm__aviso--error");
+  };
+  marcarTema(temaActual);
+  pintarOpacidad(opacidadActual);
+
+  obtenerConfig()
+    .then((c) => {
+      if (!vivo) return;
+      marcarTema(temaValido(c.tema));
+      opacidadActual = limitarOpacidad(c.opacidad);
+      pintarOpacidad(opacidadActual);
+    })
+    .catch(() => {});
+  muestras.forEach((m) =>
+    m.addEventListener("click", async () => {
+      const tema = m.dataset.tema!;
+      avisoApariencia.textContent = "";
+      avisoApariencia.classList.remove("fm__aviso--error");
+      marcarTema(tema);
+      aplicarTema(tema, opacidadActual);
+      try {
+        await actualizarConfig((c) => (c.tema = tema));
+      } catch {
+        falloApariencia();
+      }
+    }),
+  );
+  // Vista previa en vivo al arrastrar; se guarda al soltar
+  deslizador.addEventListener("input", () => {
+    opacidadActual = limitarOpacidad(Number(deslizador.value) / 100);
+    pintarOpacidad(opacidadActual);
+    aplicarTema(temaActual, opacidadActual);
+  });
+  deslizador.addEventListener("change", async () => {
+    avisoApariencia.textContent = "";
+    avisoApariencia.classList.remove("fm__aviso--error");
+    try {
+      await actualizarConfig((c) => (c.opacidad = opacidadActual));
+    } catch {
+      falloApariencia();
+    }
+  });
 
   // --- PANEL: borde y autoarranque ---
   const cuerpoPanel = q("panel");

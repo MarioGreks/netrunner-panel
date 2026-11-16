@@ -93,6 +93,70 @@
 .ajs .fm__etiqueta { margin-top: var(--esp-3); }
 .ajs .fm > .fm__etiqueta:first-child { margin-top: 0; }
 
+/* Muestras de tema: cada una lleva su data-tema y se pinta con sus propios colores */
+.ajs__temas { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--esp-2); }
+.ajs__tema {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 74px;
+  padding: var(--esp-2);
+  text-align: left;
+  background: var(--fondo);
+  border: 1px solid var(--primario-tenue);
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+}
+.ajs__tema:hover { border-color: var(--primario); }
+.ajs__tema:focus-visible { outline: 1px solid var(--texto); outline-offset: -3px; }
+.ajs__tema-bloque { width: 40%; height: 12px; background: var(--primario); box-shadow: 0 0 6px var(--primario-tenue); }
+.ajs__tema-linea { width: 80%; height: 2px; background: var(--secundario); }
+.ajs__tema-nombre {
+  margin-top: auto;
+  font-family: var(--fuente-titulo);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--texto);
+}
+.ajs__tema-activo {
+  display: none;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--primario);
+}
+.ajs__tema--activo { border-color: var(--primario); box-shadow: inset 0 0 0 1px var(--primario); }
+.ajs__tema--activo .ajs__tema-activo { display: block; }
+
+/* Deslizador de transparencia */
+.ajs__dato--slider { margin-top: var(--esp-4); }
+.ajs__deslizador {
+  --pct: 50%;
+  width: 100%;
+  height: 16px;
+  margin-top: var(--esp-1);
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.ajs__deslizador::-webkit-slider-runnable-track {
+  height: 4px;
+  background: linear-gradient(to right, var(--primario) var(--pct), var(--primario-suave) var(--pct));
+  border: 1px solid var(--primario-tenue);
+}
+.ajs__deslizador::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 16px;
+  margin-top: -7px;
+  background: var(--primario);
+  border: 0;
+  box-shadow: 0 0 6px var(--primario-tenue);
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 50% 100%, 0 70%);
+}
+.ajs__deslizador:focus-visible { outline: 1px solid var(--secundario); outline-offset: 2px; }
+
 @media (prefers-reduced-motion: reduce) {
   .ajs__resalte { animation: none; }
 }

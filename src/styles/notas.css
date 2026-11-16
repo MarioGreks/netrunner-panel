@@ -63,8 +63,8 @@
 .nts__btn:hover { background: var(--cian-suave); border-color: var(--cian); }
 .nts__btn--ok { color: var(--amarillo); border-color: var(--amarillo-tenue); }
 .nts__btn--ok:hover { background: var(--amarillo-suave); border-color: var(--amarillo); }
-.nts__btn--peligro { color: var(--rojo); border-color: rgba(255, 42, 77, 0.4); }
-.nts__btn--peligro:hover { background: rgba(255, 42, 77, 0.12); border-color: var(--rojo); }
+.nts__btn--peligro { color: var(--rojo); border-color: var(--alerta-tenue); }
+.nts__btn--peligro:hover { background: var(--alerta-suave); border-color: var(--rojo); }
 
 .nts__input {
   width: 100%;
@@ -72,7 +72,7 @@
   font-family: var(--fuente-datos);
   font-size: var(--tam-s);
   color: var(--texto);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--velo);
   border: 1px solid var(--cian-tenue);
   outline: none;
   user-select: text;
@@ -119,7 +119,7 @@
   background: var(--fondo);
   clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%);
 }
-.nts__casilla:hover::before { background: #10333a; }
+.nts__casilla:hover::before { background: var(--secundario-hundido); }
 .nts__casilla svg { position: relative; z-index: 1; color: var(--fondo); }
 .nts__tarea--hecha .nts__casilla,
 .nts__tarea--tachando .nts__casilla { background: var(--amarillo); }
@@ -162,7 +162,7 @@
   cursor: pointer;
 }
 .nts__tarea:hover .nts__borrar, .nts__nota:hover .nts__borrar, .nts__borrar:focus-visible { opacity: 1; }
-.nts__borrar:hover { border-color: var(--rojo); background: rgba(255, 42, 77, 0.12); }
+.nts__borrar:hover { border-color: var(--rojo); background: var(--alerta-suave); }
 
 .nts__plegable {
   width: 100%;
@@ -223,7 +223,7 @@
   font-size: var(--tam-s);
   line-height: 1.5;
   color: var(--texto);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--velo);
   border: 1px solid var(--cian-tenue);
   outline: none;
   user-select: text;

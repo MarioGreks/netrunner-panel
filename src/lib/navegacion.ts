@@ -1,5 +1,5 @@
 // Navegación entre vistas del panel. Los módulos piden abrir AJUSTES sin conocer a main.ts.
-export type SeccionAjustes = "panel" | "calendario" | "meteo" | "notas" | "sistema";
+export type SeccionAjustes = "apariencia" | "panel" | "calendario" | "meteo" | "notas" | "sistema";
 
 const EVENTO = "ajustes:abrir";
 

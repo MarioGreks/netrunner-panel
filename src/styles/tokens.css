@@ -4,17 +4,55 @@
 @import "@fontsource/jetbrains-mono/700.css";
 
 :root {
+  /* Base de color: la fijan los temas (temas.css); estos son los valores de «netrunner» */
+  --primario: #f5e50a;
+  --secundario: #2de2e6;
+  --alerta: #ff2a4d;
   --fondo: #07080c;
-  --panel: rgba(9, 11, 16, 0.94);
-  --amarillo: #f5e50a;
-  --cian: #2de2e6;
-  --rojo: #ff2a4d;
-  --amarillo-tenue: rgba(245, 229, 10, 0.35);
-  --amarillo-suave: rgba(245, 229, 10, 0.12);
-  --cian-tenue: rgba(45, 226, 230, 0.35);
-  --cian-suave: rgba(45, 226, 230, 0.12);
+  --fondo-panel-rgb: 9, 11, 16;
+  --opacidad-panel: 0.94;
+}
+
+/* Derivados y alias: se recalculan también dentro de cualquier elemento con data-tema
+   (las muestras de AJUSTES), porque var() se resuelve donde se declara. */
+:root,
+[data-tema] {
+  --panel: rgba(var(--fondo-panel-rgb), var(--opacidad-panel));
+
+  /* Derivados de la base */
+  --primario-tenue: color-mix(in srgb, var(--primario) 35%, transparent);
+  --primario-suave: color-mix(in srgb, var(--primario) 12%, transparent);
+  --primario-hundido: color-mix(in srgb, var(--primario) 8%, var(--fondo));
+  --secundario-tenue: color-mix(in srgb, var(--secundario) 35%, transparent);
+  --secundario-suave: color-mix(in srgb, var(--secundario) 12%, transparent);
+  --secundario-linea: color-mix(in srgb, var(--secundario) 16%, transparent);
+  --secundario-hundido: color-mix(in srgb, var(--secundario) 20%, var(--fondo));
+  --alerta-tenue: color-mix(in srgb, var(--alerta) 40%, transparent);
+  --alerta-suave: color-mix(in srgb, var(--alerta) 12%, transparent);
+  --alerta-media: color-mix(in srgb, var(--alerta) 15%, transparent);
+  --alerta-glow: color-mix(in srgb, var(--alerta) 50%, transparent);
+  --fondo-trama: color-mix(in srgb, var(--fondo) 55%, transparent);
+
+  /* Alias de compatibilidad con los nombres antiguos */
+  --amarillo: var(--primario);
+  --cian: var(--secundario);
+  --rojo: var(--alerta);
+  --amarillo-tenue: var(--primario-tenue);
+  --amarillo-suave: var(--primario-suave);
+  --cian-tenue: var(--secundario-tenue);
+  --cian-suave: var(--secundario-suave);
+}
+
+:root {
+  /* Neutros (iguales en todos los temas) */
   --texto: #d9dbe3;
   --texto-tenue: #7c8090;
+  --negro: #000;
+  --tinta: #000; /* texto sobre fondos de acento */
+  --sombra: rgba(0, 0, 0, 0.6);
+  --linea-neutra: rgba(255, 255, 255, 0.06);
+  --velo: rgba(255, 255, 255, 0.03);
+  --velo-fino: rgba(255, 255, 255, 0.025);
 
   --esp-1: 4px;
   --esp-2: 8px;

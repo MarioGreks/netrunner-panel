@@ -5,6 +5,7 @@ mod config;
 mod cuentas;
 mod estado;
 mod meteo;
+mod microsoft;
 mod musica;
 mod notas;
 mod sistema;
@@ -40,6 +41,11 @@ pub fn run() {
             cuentas::estado_cuentas,
             cuentas::marcar_cuenta,
             cuentas::desmarcar_cuenta,
+            microsoft::estado_cuentas_ms,
+            microsoft::conectar_cuenta_ms,
+            microsoft::desconectar_cuenta_ms,
+            microsoft::renombrar_cuenta_ms,
+            microsoft::probar_cuenta_ms,
             meteo::estado_meteo,
             meteo::buscar_ciudad,
             notas::estado_notas,
@@ -69,6 +75,7 @@ pub fn run() {
             ventanas::preparar(&handle);
             sistema::iniciar(&handle);
             cuentas::iniciar(&handle);
+            microsoft::iniciar(&handle);
             calendario::iniciar(&handle);
             meteo::iniciar(&handle);
             notas::iniciar(&handle);

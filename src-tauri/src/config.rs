@@ -32,6 +32,20 @@ pub struct Ciudad {
     pub longitud: f64,
 }
 
+/// Cuenta Microsoft conectada. Aquí NUNCA hay tokens: el refresh_token vive en el
+/// Administrador de credenciales de Windows y el access_token solo en memoria.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CuentaMs {
+    /// `oid.tid` del id_token.
+    pub id: String,
+    pub correo: String,
+    pub nombre: String,
+    /// Editable por el usuario (UAH, PERSONAL…).
+    pub etiqueta: String,
+    pub tenant: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -48,6 +62,11 @@ pub struct Config {
     pub opacidad: f64,
     /// Con `true` el borde de la pantalla no abre el panel (se activa desde la bandeja).
     pub borde_pausado: bool,
+    /// «Id. de aplicación (cliente)» del registro de la app en Entra. No es secreto, pero
+    /// lo pone el usuario y no va en el código.
+    pub ms_client_id: Option<String>,
+    /// Cuentas Microsoft conectadas (sin tokens).
+    pub cuentas_ms: Vec<CuentaMs>,
 }
 
 pub const OPACIDAD_MIN: f64 = 0.55;
@@ -65,6 +84,8 @@ impl Default for Config {
             tema: "netrunner".to_string(),
             opacidad: OPACIDAD_DEFECTO,
             borde_pausado: false,
+            ms_client_id: None,
+            cuentas_ms: Vec::new(),
         }
     }
 }
@@ -96,7 +117,7 @@ pub fn cargar(app: &AppHandle) -> Config {
         .unwrap_or_default()
 }
 
-fn guardar(app: &AppHandle, config: &Config) -> Result<(), String> {
+pub(crate) fn guardar(app: &AppHandle, config: &Config) -> Result<(), String> {
     let r = ruta(app).ok_or("sin directorio de configuración")?;
     if let Some(dir) = r.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
@@ -132,6 +153,9 @@ pub fn get_config(estado: State<Estado>) -> Config {
 #[tauri::command]
 pub fn set_config(app: AppHandle, estado: State<Estado>, mut config: Config) -> Result<(), String> {
     config.normalizar();
+    // Las cuentas las gestiona solo el módulo Microsoft: un formulario con una copia
+    // antigua de la configuración no debe pisarlas.
+    config.cuentas_ms = estado.config.lock().unwrap().cuentas_ms.clone();
     guardar(&app, &config)?;
     let anterior = std::mem::replace(&mut *estado.config.lock().unwrap(), config.clone());
     sincronizar_autoarranque(&app, config.autostart);
@@ -229,6 +253,21 @@ mod pruebas {
         assert!(c.borde_pausado);
         let ida: Config = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
         assert_eq!(ida, c);
+    }
+
+    #[test]
+    fn config_antigua_sin_campos_microsoft() {
+        let c: Config = serde_json::from_str(r#"{"edge":"left","tema":"netrunner"}"#).unwrap();
+        assert!(c.ms_client_id.is_none());
+        assert!(c.cuentas_ms.is_empty());
+        let c: Config = serde_json::from_str(
+            r#"{"ms_client_id":"00000000-0000-0000-0000-000000000000","cuentas_ms":[{"id":"a.b","correo":"x@example.com"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(c.cuentas_ms[0].correo, "x@example.com");
+        assert_eq!(c.cuentas_ms[0].etiqueta, "");
+        let json = serde_json::to_string(&c).unwrap();
+        assert!(!json.contains("token"));
     }
 
     #[test]

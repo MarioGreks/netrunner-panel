@@ -1,11 +1,11 @@
-// Pantalla AJUSTES: apariencia, panel, calendario, meteo, notas y sistema. No es una pestaña de la
+// Pantalla AJUSTES: apariencia, panel, calendario, cuentas, meteo, notas y sistema. No es una pestaña de la
 // barra: se abre con el engranaje de la cabecera y se cierra con VOLVER o Esc.
 import { getVersion } from "@tauri-apps/api/app";
 import { abrirCarpetaDatos, alEvento, obtenerConfig, type Borde } from "../../lib/ipc";
 import { bloqueo } from "../../lib/bloqueo";
 import type { SeccionAjustes } from "../../lib/navegacion";
 import { aplicarTema, limitarOpacidad, OPACIDAD_MAX, OPACIDAD_MIN, TEMAS, temaValido } from "../../lib/tema";
-import { actualizarConfig, formularioCarpeta, formularioCiudad, formularioIcs, type Formulario } from "../../ui/formularios";
+import { actualizarConfig, formularioCarpeta, formularioCiudad, formularioCuentasMs, formularioIcs, type Formulario } from "../../ui/formularios";
 
 const BORDES: { valor: Borde; texto: string }[] = [
   { valor: "left", texto: "IZQ" },
@@ -36,9 +36,10 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
       ${seccion("apariencia", "APARIENCIA", "SKIN // 0x00")}
       ${seccion("panel", "PANEL", "CFG // 0x01")}
       ${seccion("calendario", "CALENDARIO", "ICS // 0x02", "marco--cian")}
-      ${seccion("meteo", "METEO", "GEO // 0x03", "marco--cian")}
-      ${seccion("notas", "NOTAS", "SYNC // 0x04")}
-      ${seccion("sistema", "SISTEMA", "SYS // 0x05")}
+      ${seccion("cuentas", "CUENTAS", "MS // 0x03")}
+      ${seccion("meteo", "METEO", "GEO // 0x04", "marco--cian")}
+      ${seccion("notas", "NOTAS", "SYNC // 0x05")}
+      ${seccion("sistema", "SISTEMA", "SYS // 0x06")}
     </div>`;
 
   const q = <T extends HTMLElement>(id: string) => contenedor.querySelector<T>(`[data-id="${id}"]`)!;
@@ -205,6 +206,7 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
     q(id).appendChild(f.el);
   };
   meter("calendario", formularioIcs());
+  meter("cuentas", formularioCuentasMs());
   meter("meteo", formularioCiudad());
   meter("notas", formularioCarpeta());
 

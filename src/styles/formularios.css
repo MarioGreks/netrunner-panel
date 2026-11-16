@@ -62,3 +62,23 @@
 .fm__resultado:hover { background: var(--cian-suave); color: var(--cian); }
 .fm__aviso { min-height: 1em; margin-top: var(--esp-2); font-size: var(--tam-xs); color: var(--amarillo); }
 .fm__aviso--error { color: var(--rojo); }
+
+/* Cuentas Microsoft */
+.fm__ayuda { margin-top: var(--esp-1); font-size: var(--tam-xs); color: var(--texto-tenue); }
+.cta { display: flex; flex-direction: column; gap: var(--esp-3); margin-top: var(--esp-3); }
+.cta:empty { display: none; }
+.cta__cuenta { padding: var(--esp-2); border: 1px solid var(--secundario-linea); background: var(--velo-fino); }
+.cta__cab { display: flex; align-items: center; gap: var(--esp-2); }
+.cta__etiqueta { flex: 0 1 9em; font-family: var(--fuente-titulo); letter-spacing: 0.1em; }
+.cta__estado { margin-left: auto; font-size: var(--tam-xs); letter-spacing: 0.14em; color: var(--secundario); }
+.cta__estado--reconectar,
+.cta__estado--bloqueada,
+.cta__estado--error { color: var(--alerta); }
+.cta__nombre { margin-top: var(--esp-2); font-size: var(--tam-s); color: var(--texto); }
+.cta__correo { font-size: var(--tam-xs); color: var(--texto-tenue); word-break: break-all; user-select: text; }
+.cta__detalle { margin-top: var(--esp-1); font-size: var(--tam-xs); color: var(--texto-tenue); }
+.cta__detalle--reconectar,
+.cta__detalle--bloqueada,
+.cta__detalle--error { color: var(--alerta); }
+.cta__confirma { align-self: center; font-size: var(--tam-xs); color: var(--alerta); }
+.fm__btn:disabled { opacity: 0.4; cursor: default; background: none; }

@@ -3,8 +3,15 @@
 // conservando el resto. Los usa la pantalla AJUSTES.
 import { open } from "@tauri-apps/plugin-dialog";
 import {
+  alEvento,
   buscarCiudad,
   carpetaOnedrive,
+  conectarCuentaMs,
+  desconectarCuentaMs,
+  estadoCuentasMs,
+  probarCuentaMs,
+  renombrarCuentaMs,
+  type CuentaMs,
   guardarConfig,
   obtenerConfig,
   sincronizarNotas,
@@ -228,4 +235,203 @@ export function formularioCarpeta(): Formulario {
   });
 
   return { el, destruir: () => {} };
+}
+
+// --- Cuentas Microsoft ---
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function formularioCuentasMs(): Formulario {
+  const el = crear(`
+    <label class="fm__etiqueta" for="fm-msid">ID DE CLIENTE (ENTRA)</label>
+    <div class="fm__fila">
+      <input id="fm-msid" class="fm__input" data-id="msid" type="text" autocomplete="off" spellcheck="false" placeholder="00000000-0000-0000-0000-000000000000" />
+      <button class="fm__btn fm__btn--ok" data-id="guardar" type="button">GUARDAR</button>
+    </div>
+    <div class="fm__ayuda">Registro de app en portal.azure.com · tipo: cualquier directorio + cuentas personales · redirección: cliente público http://localhost</div>
+    <div class="fm__fila">
+      <button class="fm__btn fm__btn--ok" data-id="conectar" type="button" disabled>+ CONECTAR CUENTA MICROSOFT</button>
+    </div>
+    <div class="cta" data-id="lista"></div>
+    <div class="fm__aviso"></div>`);
+  const aviso = avisador(el);
+  const campo = q<HTMLInputElement>(el, "msid");
+  const conectar = q<HTMLButtonElement>(el, "conectar");
+  const lista = q(el, "lista");
+  let idGuardado = "";
+  let ocupado = false;
+  let cuentas: CuentaMs[] = [];
+  let vivo = true;
+  let confirmando: string | null = null;
+  const probando = new Set<string>();
+
+  const pintarConectar = () => {
+    conectar.disabled = ocupado || !idGuardado;
+    conectar.textContent = ocupado ? "ESPERANDO AL NAVEGADOR…" : "+ CONECTAR CUENTA MICROSOFT";
+  };
+  const boton = (texto: string, clase: string, accion: () => void, desactivado = false) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = `fm__btn ${clase}`.trim();
+    b.textContent = texto;
+    b.disabled = desactivado;
+    b.addEventListener("click", accion);
+    return b;
+  };
+
+  const iniciarSesion = async () => {
+    if (ocupado) return;
+    ocupado = true;
+    bloqueo.dialogoAbierto = true; // el navegador le quita el foco al panel
+    pintarConectar();
+    aviso("");
+    try {
+      await conectarCuentaMs();
+      aviso("Cuenta conectada");
+    } catch (e) {
+      aviso(typeof e === "string" ? e : "No se pudo conectar la cuenta", true);
+    } finally {
+      ocupado = false;
+      bloqueo.dialogoAbierto = false;
+      if (vivo) pintarConectar();
+    }
+  };
+
+  const pintar = () => {
+    if (!vivo) return;
+    const activo = document.activeElement;
+    if (activo instanceof HTMLInputElement && lista.contains(activo)) return; // no pisar una edición
+    lista.replaceChildren(
+      ...cuentas.map((c) => {
+        const fila = document.createElement("div");
+        fila.className = "cta__cuenta";
+        const cab = document.createElement("div");
+        cab.className = "cta__cab";
+        const etq = document.createElement("input");
+        etq.className = "fm__input cta__etiqueta";
+        etq.maxLength = 24;
+        etq.value = c.etiqueta;
+        etq.setAttribute("aria-label", "Etiqueta de la cuenta");
+        etq.addEventListener("change", () => {
+          renombrarCuentaMs(c.id, etq.value).catch(() => aviso("No se pudo renombrar la cuenta", true));
+        });
+        etq.addEventListener("focusout", () => setTimeout(pintar, 0));
+        etq.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") etq.blur();
+        });
+        const est = document.createElement("span");
+        est.className = `cta__estado cta__estado--${c.estado}`;
+        est.textContent = c.estado.toUpperCase();
+        cab.append(etq, est);
+        const nombre = document.createElement("div");
+        nombre.className = "cta__nombre";
+        nombre.textContent = c.nombre;
+        const correo = document.createElement("div");
+        correo.className = "cta__correo";
+        correo.textContent = c.correo;
+        fila.append(cab, nombre, correo);
+        if (c.detalle) {
+          const d = document.createElement("div");
+          d.className = `cta__detalle cta__detalle--${c.estado}`;
+          d.textContent = c.detalle;
+          fila.appendChild(d);
+        }
+        const acc = document.createElement("div");
+        acc.className = "fm__fila fm__fila--envolver";
+        if (confirmando === c.id) {
+          const t = document.createElement("span");
+          t.className = "cta__confirma";
+          t.textContent = "¿DESCONECTAR?";
+          acc.append(
+            t,
+            boton("SÍ", "fm__btn--peligro", async () => {
+              confirmando = null;
+              try {
+                await desconectarCuentaMs(c.id);
+                aviso("Cuenta desconectada");
+              } catch (e) {
+                aviso(typeof e === "string" ? e : "No se pudo desconectar", true);
+              }
+            }),
+            boton("NO", "", () => {
+              confirmando = null;
+              pintar();
+            }),
+          );
+        } else {
+          acc.append(
+            boton(
+              probando.has(c.id) ? "PROBANDO…" : "PROBAR",
+              "",
+              async () => {
+                probando.add(c.id);
+                aviso("");
+                pintar();
+                try {
+                  aviso(await probarCuentaMs(c.id));
+                } catch (e) {
+                  aviso(typeof e === "string" ? e : "La prueba falló", true);
+                } finally {
+                  probando.delete(c.id);
+                  pintar();
+                }
+              },
+              probando.has(c.id),
+            ),
+            boton("RECONECTAR", "fm__btn--ok", () => void iniciarSesion(), ocupado || !idGuardado),
+            boton("DESCONECTAR", "fm__btn--peligro", () => {
+              confirmando = c.id;
+              pintar();
+            }),
+          );
+        }
+        fila.appendChild(acc);
+        return fila;
+      }),
+    );
+  };
+
+  obtenerConfig()
+    .then((c) => {
+      idGuardado = c.ms_client_id ?? "";
+      campo.value = idGuardado;
+      pintarConectar();
+    })
+    .catch(() => {});
+  estadoCuentasMs()
+    .then((l) => {
+      cuentas = l;
+      pintar();
+    })
+    .catch(() => {});
+  let desescuchar: (() => void) | null = null;
+  void alEvento<CuentaMs[]>("cuentas_ms://estado", (l) => {
+    cuentas = l;
+    pintar();
+  }).then((un) => {
+    if (vivo) desescuchar = un;
+    else un();
+  });
+
+  q(el, "guardar").addEventListener("click", async () => {
+    const id = campo.value.trim();
+    if (id && !GUID.test(id)) return aviso("El ID de cliente debe ser un GUID", true);
+    try {
+      await actualizarConfig((c) => (c.ms_client_id = id || null));
+      idGuardado = id;
+      pintarConectar();
+      pintar();
+      aviso(id ? "ID de cliente guardado" : "ID de cliente borrado");
+    } catch {
+      aviso("No se pudo guardar la configuración", true);
+    }
+  });
+  conectar.addEventListener("click", () => void iniciarSesion());
+
+  return {
+    el,
+    destruir: () => {
+      vivo = false;
+      desescuchar?.();
+    },
+  };
 }

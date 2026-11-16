@@ -25,6 +25,10 @@ export interface Config {
   opacidad: number;
   /** Con true el borde de la pantalla no abre el panel (menú de la bandeja). */
   borde_pausado: boolean;
+  /** Id. de aplicación (cliente) de Entra; no es secreto. */
+  ms_client_id: string | null;
+  /** Cuentas Microsoft conectadas (sin tokens); las gestiona Rust. */
+  cuentas_ms: unknown[];
 }
 
 export const obtenerConfig = () => invoke<Config>("get_config");
@@ -223,6 +227,23 @@ export const borrarAcceso = (id: string) => invoke<void>("borrar_acceso", { id }
 export const reordenarAccesos = (ids: string[]) => invoke<void>("reordenar_accesos", { ids });
 export const abrirAcceso = (id: string) => invoke<void>("abrir_acceso", { id });
 
+export type EstadoCuentaMs = "conectada" | "reconectar" | "bloqueada" | "error";
+
+export interface CuentaMs {
+  id: string;
+  correo: string;
+  nombre: string;
+  etiqueta: string;
+  estado: EstadoCuentaMs;
+  detalle: string | null;
+}
+
+export const estadoCuentasMs = () => invoke<CuentaMs[]>("estado_cuentas_ms");
+export const conectarCuentaMs = () => invoke<void>("conectar_cuenta_ms");
+export const desconectarCuentaMs = (id: string) => invoke<void>("desconectar_cuenta_ms", { id });
+export const renombrarCuentaMs = (id: string, etiqueta: string) => invoke<void>("renombrar_cuenta_ms", { id, etiqueta });
+export const probarCuentaMs = (id: string) => invoke<string>("probar_cuenta_ms", { id });
+
 export type EventoPanel =
   | "panel://mostrar"
   | "panel://ocultar"
@@ -233,6 +254,7 @@ export type EventoPanel =
   | "sistema://muestra"
   | "calendario://estado"
   | "cuentas://estado"
+  | "cuentas_ms://estado"
   | "meteo://estado"
   | "notas://estado"
   | "musica://estado"

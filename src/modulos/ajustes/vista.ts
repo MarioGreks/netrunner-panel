@@ -149,10 +149,16 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
         <span class="ajs__marca" aria-hidden="true"></span>
         <span>Arrancar con Windows</span>
       </label>
+      <label class="ajs__casilla">
+        <input type="checkbox" data-id="ocultar-pc" />
+        <span class="ajs__marca" aria-hidden="true"></span>
+        <span>Ocultar en pantalla completa (juegos, vídeos, presentaciones)</span>
+      </label>
       <div class="fm__aviso" data-id="aviso-panel"></div>
     </div>`;
   const segmentos = [...cuerpoPanel.querySelectorAll<HTMLButtonElement>(".ajs__seg")];
   const autostart = q<HTMLInputElement>("autostart");
+  const ocultarPc = q<HTMLInputElement>("ocultar-pc");
   const avisoPanel = q("aviso-panel");
 
   const marcarBorde = (borde: Borde) => {
@@ -176,6 +182,7 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
       if (!vivo) return;
       marcarBorde(c.edge);
       autostart.checked = c.autostart;
+      ocultarPc.checked = c.ocultar_pantalla_completa;
     })
     .catch(() => {});
   segmentos.forEach((s) =>
@@ -196,6 +203,15 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
       await actualizarConfig((c) => (c.autostart = autostart.checked));
     } catch {
       autostart.checked = !autostart.checked;
+      fallo();
+    }
+  });
+  ocultarPc.addEventListener("change", async () => {
+    limpiarAviso();
+    try {
+      await actualizarConfig((c) => (c.ocultar_pantalla_completa = ocultarPc.checked));
+    } catch {
+      ocultarPc.checked = !ocultarPc.checked;
       fallo();
     }
   });

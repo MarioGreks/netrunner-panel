@@ -9,6 +9,7 @@ import {
   estadoCalendario,
   estadoCuentas,
   estadoMeteo,
+  estadoPantallaCompleta,
   irAEventoPanel,
   obtenerConfig,
   type Borde,
@@ -223,6 +224,12 @@ estadoCuentas().then((c) => { cuentas = c; pintarAgenda(); }).catch(() => {});
 const mini = q("mini");
 let temporizadorHover: number | undefined;
 let bloqueadoHasta = 0;
+let pantallaCompleta = false;
+void estadoPantallaCompleta().then((v) => (pantallaCompleta = v)).catch(() => {});
+void alEvento<boolean>("pantalla_completa://cambio", (v) => {
+  pantallaCompleta = v;
+  if (v) clearTimeout(temporizadorHover);
+});
 
 mini.addEventListener("click", (e) => {
   // Una cuenta atrás (la grande o una fila) abre el panel en METEO y va a ese evento
@@ -238,10 +245,11 @@ mini.addEventListener("mouseenter", () => {
   clearTimeout(temporizadorHover);
   temporizadorHover = window.setTimeout(() => {
     if (Date.now() < bloqueadoHasta) return;
-    // Con la apertura por borde en pausa (bandeja) tampoco abre el hover
+    // Con la apertura por borde en pausa (bandeja) o con pantalla completa tampoco abre el hover
+    if (pantallaCompleta) return;
     obtenerConfig()
       .then((c) => {
-        if (!c.borde_pausado) void alternarPanel();
+        if (!c.borde_pausado && !pantallaCompleta) void alternarPanel();
       })
       .catch(() => {});
   }, ESPERA_HOVER);

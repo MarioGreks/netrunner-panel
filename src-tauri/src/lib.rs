@@ -9,6 +9,7 @@ mod microsoft;
 mod musica;
 mod notas;
 mod outlook;
+mod pantalla_completa;
 mod sistema;
 mod ventanas;
 
@@ -36,6 +37,7 @@ pub fn run() {
             ventanas::ocultar_panel,
             ventanas::ajustar_mini,
             ventanas::ir_a_evento,
+            ventanas::estado_pantalla_completa,
             sistema::muestra_sistema,
             calendario::estado_calendario,
             calendario::sincronizar_calendario,

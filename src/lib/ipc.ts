@@ -25,6 +25,8 @@ export interface Config {
   opacidad: number;
   /** Con true el borde de la pantalla no abre el panel (menú de la bandeja). */
   borde_pausado: boolean;
+  /** Ocultar miniventana y borde mientras haya algo a pantalla completa. */
+  ocultar_pantalla_completa: boolean;
   /** Id. de aplicación (cliente) de Entra; no es secreto. */
   ms_client_id: string | null;
   /** Cuentas Microsoft conectadas (sin tokens); las gestiona Rust. */
@@ -42,6 +44,7 @@ export interface Config {
 export const obtenerConfig = () => invoke<Config>("get_config");
 export const guardarConfig = (config: Config) => invoke<void>("set_config", { config });
 export const alternarPanel = () => invoke<void>("alternar_panel");
+export const estadoPantallaCompleta = () => invoke<boolean>("estado_pantalla_completa");
 export const ocultarPanel = () => invoke<void>("ocultar_panel");
 /** Fija el alto lógico de la miniventana (Rust lo limita a 96-220 y la recoloca). */
 export const ajustarMini = (alto: number) => invoke<void>("ajustar_mini", { alto });
@@ -304,6 +307,7 @@ export type EventoPanel =
   | "panel://ajustes"
   | "panel://ir_evento"
   | "config://cambio"
+  | "pantalla_completa://cambio"
   | "tema://cambio"
   | "sistema://muestra"
   | "calendario://estado"

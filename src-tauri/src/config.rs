@@ -63,6 +63,8 @@ pub struct Config {
     pub opacidad: f64,
     /// Con `true` el borde de la pantalla no abre el panel (se activa desde la bandeja).
     pub borde_pausado: bool,
+    /// Ocultar la miniventana y el borde mientras haya algo a pantalla completa.
+    pub ocultar_pantalla_completa: bool,
     /// «Id. de aplicación (cliente)» del registro de la app en Entra. No es secreto, pero
     /// lo pone el usuario y no va en el código.
     pub ms_client_id: Option<String>,
@@ -93,6 +95,7 @@ impl Default for Config {
             tema: "netrunner".to_string(),
             opacidad: OPACIDAD_DEFECTO,
             borde_pausado: false,
+            ocultar_pantalla_completa: true,
             ms_client_id: None,
             cuentas_ms: Vec::new(),
             outlook_auto: true,
@@ -285,6 +288,15 @@ mod pruebas {
         c.opacidad = 0.8;
         c.normalizar();
         assert_eq!(c.opacidad, 0.8);
+    }
+
+    #[test]
+    fn ocultar_pantalla_completa_por_defecto_y_antigua() {
+        // Config antigua sin el campo: activado
+        let c: Config = serde_json::from_str(r#"{"edge":"left"}"#).unwrap();
+        assert!(c.ocultar_pantalla_completa);
+        let c: Config = serde_json::from_str(r#"{"ocultar_pantalla_completa":false}"#).unwrap();
+        assert!(!c.ocultar_pantalla_completa);
     }
 
     #[test]

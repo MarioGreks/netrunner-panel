@@ -26,6 +26,8 @@ const MARGEN_BORDE: f64 = 2.0;
 /// Fracción central del borde que abre el panel (0.6 = el 60 % del medio).
 const ZONA_CENTRAL: f64 = 0.6;
 const SONDEO: Duration = Duration::from_millis(60);
+/// Cada cuánto se comprueba la pantalla completa (más caro que el sondeo del cursor).
+const SONDEO_PANTALLA_COMPLETA: Duration = Duration::from_millis(500);
 const ESPERA_APERTURA: Duration = Duration::from_millis(250);
 /// Tiempo con el cursor fuera del panel antes de cerrarlo (evita cierres por un roce).
 const ESPERA_CIERRE: Duration = Duration::from_millis(120);
@@ -149,9 +151,40 @@ pub fn ir_a_evento(app: AppHandle, id: String) {
 /// Estado inicial: miniventana visible, panel oculto (nunca se muestra el panel al arrancar).
 pub fn preparar(app: &AppHandle) {
     reposicionar(app);
-    if let Some(t) = app.get_webview_window("tab") {
-        let _ = t.show();
+    if !app.state::<Estado>().pantalla_completa.load(Ordering::SeqCst) {
+        if let Some(t) = app.get_webview_window("tab") {
+            let _ = t.show();
+        }
     }
+}
+
+/// ¿Hay pantalla completa activa (y la casilla activada)?
+#[tauri::command]
+pub fn estado_pantalla_completa(app: AppHandle) -> bool {
+    app.state::<Estado>().pantalla_completa.load(Ordering::SeqCst)
+}
+
+/// Aplica un cambio de pantalla completa: oculta o muestra la miniventana (si el panel
+/// está cerrado) y avisa a la interfaz.
+fn fijar_pantalla_completa(app: &AppHandle, valor: bool) {
+    let estado = app.state::<Estado>();
+    if estado.pantalla_completa.swap(valor, Ordering::SeqCst) == valor {
+        return;
+    }
+    if !estado.panel_visible.load(Ordering::SeqCst) {
+        if valor {
+            if let Some(t) = app.get_webview_window("tab") {
+                let _ = t.hide();
+            }
+        } else {
+            // La resolución pudo cambiar dentro de un juego
+            reposicionar(app);
+            if let Some(t) = app.get_webview_window("tab") {
+                let _ = t.show();
+            }
+        }
+    }
+    let _ = app.emit("pantalla_completa://cambio", valor);
 }
 
 pub fn mostrar_panel(app: &AppHandle) {
@@ -182,8 +215,10 @@ pub fn ocultar_panel_ya(app: &AppHandle) {
     if let Some(p) = app.get_webview_window("panel") {
         let _ = p.hide();
     }
-    if let Some(t) = app.get_webview_window("tab") {
-        let _ = t.show();
+    if !estado.pantalla_completa.load(Ordering::SeqCst) {
+        if let Some(t) = app.get_webview_window("tab") {
+            let _ = t.show();
+        }
     }
 }
 
@@ -250,8 +285,14 @@ pub fn iniciar_deteccion(app: AppHandle) {
         // (el frontend lo ignoró, p. ej. con un diálogo nativo abierto), se rearma.
         let mut cerrando: Option<Instant> = None;
         let mut armado = true;
+        let mut ultima_pc: Option<Instant> = None;
         loop {
             thread::sleep(SONDEO);
+            if ultima_pc.map_or(true, |t| t.elapsed() >= SONDEO_PANTALLA_COMPLETA) {
+                ultima_pc = Some(Instant::now());
+                let activa = app.state::<Estado>().config.lock().unwrap().ocultar_pantalla_completa;
+                fijar_pantalla_completa(&app, activa && crate::pantalla_completa::detectar());
+            }
             let Ok(c) = app.cursor_position() else { continue };
             let estado = app.state::<Estado>();
             let borde = estado.config.lock().unwrap().edge;
@@ -291,7 +332,10 @@ pub fn iniciar_deteccion(app: AppHandle) {
                 continue;
             }
             // Con la apertura por borde en pausa no se abre (el cierre sigue funcionando)
-            if estado.panel_visible.load(Ordering::SeqCst) || !armado || pausado {
+            if estado.panel_visible.load(Ordering::SeqCst) || !armado
+                || pausado
+                || estado.pantalla_completa.load(Ordering::SeqCst)
+            {
                 desde = None;
                 continue;
             }

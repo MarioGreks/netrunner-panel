@@ -44,7 +44,7 @@ Está hecho con Tauri 2, Rust y TypeScript sin framework.
 ## Instalación
 
 1. Descarga `Netrunner-Panel-Setup.exe` desde la última release del repositorio.
-2. Ejecútalo. Se instala solo para tu usuario, sin permisos de administrador.
+2. Ejecútalo. Es un instalador propio con estética HUD: eliges tema, borde de anclaje e inicio con Windows, y se instala solo para tu usuario, sin permisos de administrador.
 3. El instalador no está firmado, así que Windows SmartScreen puede avisar. Pulsa **Más información** y después **Ejecutar de todas formas**.
 4. Desde la 1.4.0 la app se actualiza sola: comprueba si hay versión nueva al arrancar y cada 6 horas, y también puedes pulsar **BUSCAR ACTUALIZACIONES** en AJUSTES → SISTEMA.
 
@@ -90,14 +90,14 @@ El instalador queda en `src-tauri/target/release/bundle/nsis/`.
 
 ## Publicar una versión
 
-1. Sube el número de versión en los tres ficheros: `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`.
-2. Compila firmando con la clave del actualizador (fuera del repositorio):
+1. Sube el número de versión en los cinco ficheros: `package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `instalador/src-tauri/Cargo.toml` e `instalador/src-tauri/tauri.conf.json` (y regenera las imágenes del instalador con `python scripts/generar-imagenes-instalador.py`).
+2. Construye el instalador HUD completo y firmado. El script compila la app (setup NSIS), el frontend del instalador y el exe del instalador con el NSIS incrustado, y lo firma con la clave del actualizador (`~/.tauri/netrunner-panel.key`, fuera del repositorio; o la que indique `TAURI_SIGNING_PRIVATE_KEY`):
 
-```powershell
-$env:TAURI_SIGNING_PRIVATE_KEY = "$HOME\.tauri\netrunner-panel.key"
-$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
-npm run tauri build
 ```
+npm run instalador:construir
+```
+
+   Con poca memoria usa `npm run instalador:construir -- --ligero` (compila con `-j 1` y sin LTO, más lento). Con `--sin-app` reutiliza el setup NSIS ya compilado de la app.
 
 3. Prepara los ficheros de la release (crea `release/` con el instalador y `latest.json`):
 

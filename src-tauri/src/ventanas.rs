@@ -98,6 +98,10 @@ fn aplicar(app: &AppHandle, etiqueta: &str, r: Rect) {
     if let Some(v) = app.get_webview_window(etiqueta) {
         let _ = v.set_size(r.1);
         let _ = v.set_position(r.0);
+        if etiqueta == "tab" {
+            // Ver `mostrar_mini`: el cambio de tamaño también puede perder la transparencia
+            let _ = v.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+        }
     }
 }
 
@@ -148,13 +152,21 @@ pub fn ir_a_evento(app: AppHandle, id: String) {
     });
 }
 
+/// Muestra la miniventana reafirmando el fondo transparente del webview: en Windows, tras
+/// ocultarla o cambiarle el tamaño, WebView2 puede pintar de negro lo que queda fuera de
+/// las esquinas cortadas.
+fn mostrar_mini(app: &AppHandle) {
+    if let Some(t) = app.get_webview_window("tab") {
+        let _ = t.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+        let _ = t.show();
+    }
+}
+
 /// Estado inicial: miniventana visible, panel oculto (nunca se muestra el panel al arrancar).
 pub fn preparar(app: &AppHandle) {
     reposicionar(app);
     if !app.state::<Estado>().pantalla_completa.load(Ordering::SeqCst) {
-        if let Some(t) = app.get_webview_window("tab") {
-            let _ = t.show();
-        }
+        mostrar_mini(app);
     }
 }
 
@@ -179,9 +191,7 @@ fn fijar_pantalla_completa(app: &AppHandle, valor: bool) {
         } else {
             // La resolución pudo cambiar dentro de un juego
             reposicionar(app);
-            if let Some(t) = app.get_webview_window("tab") {
-                let _ = t.show();
-            }
+            mostrar_mini(app);
         }
     }
     let _ = app.emit("pantalla_completa://cambio", valor);
@@ -216,9 +226,7 @@ pub fn ocultar_panel_ya(app: &AppHandle) {
         let _ = p.hide();
     }
     if !estado.pantalla_completa.load(Ordering::SeqCst) {
-        if let Some(t) = app.get_webview_window("tab") {
-            let _ = t.show();
-        }
+        mostrar_mini(app);
     }
 }
 

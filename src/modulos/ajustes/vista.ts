@@ -1,7 +1,7 @@
 // Pantalla AJUSTES: apariencia, panel, calendario, correo, cuentas (avanzado), meteo, sincronización entre equipos y sistema. No es una pestaña de la
 // barra: se abre con el engranaje de la cabecera y se cierra con VOLVER o Esc.
 import { getVersion } from "@tauri-apps/api/app";
-import { abrirCarpetaDatos, alEvento, obtenerConfig, type Borde } from "../../lib/ipc";
+import { abrirCarpetaDatos, alEvento, buscarActualizacion, obtenerConfig, type Borde } from "../../lib/ipc";
 import { bloqueo } from "../../lib/bloqueo";
 import type { SeccionAjustes } from "../../lib/navegacion";
 import { aplicarTema, limitarOpacidad, OPACIDAD_MAX, OPACIDAD_MIN, TEMAS, temaValido } from "../../lib/tema";
@@ -262,6 +262,9 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
   cuerpoSistema.innerHTML = `
     <div class="fm">
       <div class="ajs__dato"><span class="fm__etiqueta">VERSIÓN</span><span class="ajs__valor" data-id="version">…</span></div>
+      <div class="fm__fila">
+        <button class="fm__btn" data-id="buscar-act" type="button">BUSCAR ACTUALIZACIONES</button>
+      </div>
       <div class="fm__etiqueta">DATOS LOCALES</div>
       <div class="fm__ruta" data-id="ruta">…</div>
       <div class="fm__fila">
@@ -282,6 +285,30 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
       aviso.textContent = "No se pudo abrir la carpeta";
       aviso.classList.add("fm__aviso--error");
     });
+  });
+
+  q("buscar-act").addEventListener("click", () => {
+    const boton = q("buscar-act") as HTMLButtonElement;
+    const aviso = q("aviso-sistema");
+    boton.disabled = true;
+    boton.textContent = "COMPROBANDO…";
+    aviso.textContent = "";
+    aviso.classList.remove("fm__aviso--error");
+    buscarActualizacion()
+      .then((info) => {
+        if (!vivo) return;
+        aviso.textContent = info ? `Hay una versión nueva: v${info.version}` : "Estás en la última versión";
+      })
+      .catch((e) => {
+        if (!vivo) return;
+        aviso.textContent = String(e);
+        aviso.classList.add("fm__aviso--error");
+      })
+      .finally(() => {
+        if (!vivo) return;
+        boton.disabled = false;
+        boton.textContent = "BUSCAR ACTUALIZACIONES";
+      });
   });
 
   // --- Cierre ---

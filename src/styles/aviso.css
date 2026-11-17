@@ -1,0 +1,93 @@
+/* Ventana «aviso» de actualización (420×260): marco HUD de esquinas cortadas.
+   La ventana es transparente; el fondo lo ponen el marco y su interior. */
+html, body { margin: 0; height: 100%; }
+.aviso-body {
+  background: transparent;
+  color: var(--texto);
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-s);
+  overflow: hidden;
+  user-select: none;
+}
+
+.aviso {
+  --corte-av: 14px;
+  --corte-av-in: 13.6px;
+  position: fixed;
+  inset: 0;
+  padding: 1px;
+  background: var(--primario);
+  clip-path: polygon(var(--corte-av) 0, 100% 0, 100% calc(100% - var(--corte-av)), calc(100% - var(--corte-av)) 100%, 0 100%, 0 var(--corte-av));
+}
+.aviso__in {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--esp-2);
+  padding: var(--esp-3) var(--esp-4) var(--esp-4);
+  background: var(--fondo);
+  clip-path: polygon(var(--corte-av-in) 0, 100% 0, 100% calc(100% - var(--corte-av-in)), calc(100% - var(--corte-av-in)) 100%, 0 100%, 0 var(--corte-av-in));
+}
+
+.aviso__cab { display: flex; align-items: center; justify-content: space-between; }
+.aviso__sys { font-size: var(--tam-xs); letter-spacing: 0.18em; color: var(--primario-tenue); }
+.aviso__led { width: 7px; height: 7px; background: var(--secundario); box-shadow: 0 0 8px var(--secundario); animation: aviso-parpadeo 1.6s steps(2, end) infinite; }
+@keyframes aviso-parpadeo { 50% { opacity: 0.25; } }
+
+.aviso__titulo {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: var(--tam-m);
+  letter-spacing: 0.12em;
+  color: var(--primario);
+  text-shadow: 0 0 8px var(--primario-tenue);
+}
+.aviso__versiones { font-weight: 700; font-size: var(--tam-m); color: var(--secundario); letter-spacing: 0.06em; }
+
+.aviso__notas {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--esp-2);
+  background: var(--secundario-suave);
+  border-left: 2px solid var(--secundario-tenue);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+  user-select: text;
+}
+.aviso__notas::-webkit-scrollbar { width: 4px; }
+.aviso__notas::-webkit-scrollbar-thumb { background: var(--secundario-tenue); }
+
+.aviso__progreso { display: flex; align-items: center; gap: var(--esp-2); }
+.aviso__progreso[hidden], .aviso__error[hidden] { display: none; }
+.aviso__barra { flex: 1; display: flex; gap: 2px; height: 10px; }
+.aviso__seg { flex: 1; background: var(--secundario-suave); }
+.aviso__seg--on { background: var(--secundario); box-shadow: 0 0 6px var(--secundario-tenue); }
+.aviso__barra--indeterminada .aviso__seg { animation: aviso-onda 1.2s linear infinite; }
+.aviso__barra--indeterminada .aviso__seg:nth-child(3n) { animation-delay: 0.2s; }
+.aviso__barra--indeterminada .aviso__seg:nth-child(3n + 1) { animation-delay: 0.4s; }
+@keyframes aviso-onda { 0%, 100% { background: var(--secundario-suave); } 50% { background: var(--secundario-tenue); } }
+.aviso__pct { min-width: 96px; text-align: right; font-size: var(--tam-xs); letter-spacing: 0.1em; color: var(--secundario); }
+
+.aviso__error { color: var(--alerta); font-size: var(--tam-xs); line-height: 1.35; user-select: text; }
+
+.aviso__botones { display: flex; gap: var(--esp-2); justify-content: flex-end; }
+.aviso__btn {
+  padding: 6px var(--esp-4);
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--primario);
+  background: transparent;
+  border: 1px solid var(--primario-tenue);
+  cursor: pointer;
+}
+.aviso__btn:hover:not(:disabled) { background: var(--primario-suave); border-color: var(--primario); }
+.aviso__btn--primario { background: var(--primario); color: var(--tinta); border-color: var(--primario); }
+.aviso__btn--primario:hover:not(:disabled) { background: var(--primario); box-shadow: 0 0 10px var(--primario-tenue); }
+.aviso__btn:disabled { opacity: 0.4; cursor: default; }

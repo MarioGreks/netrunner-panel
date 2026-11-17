@@ -12,6 +12,7 @@ export default defineConfig({
       input: {
         panel: resolve(import.meta.dirname, "index.html"),
         tab: resolve(import.meta.dirname, "tab.html"),
+        aviso: resolve(import.meta.dirname, "aviso.html"),
       },
     },
   },

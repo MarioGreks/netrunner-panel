@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permisos mínimos para el panel y la pestaña",
-  "windows": ["panel", "tab"],
+  "description": "Permisos mínimos para el panel, la pestaña y el aviso",
+  "windows": ["panel", "tab", "aviso"],
   "permissions": [
     "core:event:default",
     "core:app:allow-version",

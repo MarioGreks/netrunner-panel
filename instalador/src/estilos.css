@@ -1,0 +1,422 @@
+/* Instalador HUD: ventana de 640x410 sin bordes, dibujada con CSS. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 13px;
+  color: #bfc3c9;
+}
+* {
+  box-sizing: border-box;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Marco: 2px en --primario con esquinas cortadas (arriba-izquierda y abajo-derecha) */
+#ventana {
+  position: fixed;
+  inset: 0;
+  background: var(--primario);
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+  transition: background-color 0.3s;
+}
+#interior {
+  position: absolute;
+  inset: 2px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--fondo);
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--secundario) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--secundario) 6%, transparent) 1px, transparent 1px);
+  background-size: 24px 24px;
+  clip-path: polygon(17px 0, 100% 0, 100% calc(100% - 17px), calc(100% - 17px) 100%, 0 100%, 0 17px);
+  transition: background-color 0.3s;
+}
+
+/* Barra superior */
+#barra {
+  flex: none;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px 0 28px;
+  border-bottom: 1px solid color-mix(in srgb, var(--primario) 35%, transparent);
+  font-family: "Orbitron", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: var(--primario);
+  transition: color 0.3s, border-color 0.3s;
+}
+#cerrar {
+  color: #9aa0a8;
+  font-size: 13px;
+  width: 26px;
+  height: 22px;
+}
+#cerrar:hover,
+#cerrar:focus-visible {
+  color: var(--alerta);
+  outline: none;
+}
+#ventana.ocupado #cerrar {
+  visibility: hidden;
+}
+
+/* Pantalla */
+#pantalla {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.pant {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cuerpo {
+  flex: 1;
+  min-height: 0;
+  padding: 22px 32px 0;
+}
+.etiqueta {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--secundario);
+  margin-bottom: 10px;
+  transition: color 0.3s;
+}
+h1 {
+  margin: 0 0 14px;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  color: var(--primario);
+  transition: color 0.3s;
+}
+h1 .pct {
+  color: var(--secundario);
+  font-size: 22px;
+  margin-left: 8px;
+}
+.texto {
+  margin: 0 0 12px;
+  line-height: 1.6;
+  max-width: 460px;
+}
+.version {
+  display: inline-block;
+  background: var(--secundario);
+  color: var(--fondo);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  margin-bottom: 12px;
+  letter-spacing: 0.05em;
+}
+
+/* Pie */
+.pie {
+  flex: none;
+  height: 62px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px 6px 32px;
+}
+.pasos {
+  display: flex;
+  gap: 5px;
+}
+.pasos i {
+  width: 22px;
+  height: 4px;
+  background: #2a2d36;
+  transition: background-color 0.3s;
+}
+.pasos i.on {
+  background: var(--primario);
+}
+.botones,
+.botones-error {
+  display: flex;
+  gap: 28px;
+  align-items: center;
+}
+
+/* Botones «texto + segmentos» */
+.btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  outline: none;
+}
+.btn .t {
+  font-family: "Orbitron", sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.18em;
+}
+.btn .seg {
+  display: flex;
+  gap: 2px;
+}
+.btn .seg i {
+  width: 10px;
+  height: 3px;
+  background: #2a2d36;
+  transition: background-color 0.15s;
+}
+.btn.principal .t {
+  color: var(--primario);
+}
+.btn.secundario .t {
+  color: #9aa0a8;
+}
+.btn.principal:hover .seg i,
+.btn.principal:focus-visible .seg i {
+  background: var(--primario);
+}
+.btn.secundario:hover .seg i,
+.btn.secundario:focus-visible .seg i {
+  background: var(--secundario);
+}
+
+/* Casillas */
+.casilla {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  outline: none;
+}
+.casilla .caja {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--secundario);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  color: transparent;
+}
+.casilla.on .caja {
+  background: var(--secundario);
+  color: var(--fondo);
+}
+.casilla:focus-visible .caja {
+  box-shadow: 0 0 0 2px var(--secundario-tenue);
+}
+
+/* Opciones */
+.dos-col {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 28px;
+}
+.col .sub {
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: #9aa0a8;
+  margin-bottom: 8px;
+}
+.temas {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.tema {
+  border: 1px solid #2a2d36;
+  padding: 7px 6px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  color: #9aa0a8;
+  outline: none;
+}
+.tema .muestras {
+  display: flex;
+  height: 8px;
+}
+.tema .muestras i {
+  flex: 1;
+}
+.tema .muestras i:nth-child(1) {
+  background: var(--primario);
+}
+.tema .muestras i:nth-child(2) {
+  background: var(--secundario);
+}
+.tema .muestras i:nth-child(3) {
+  background: var(--fondo);
+  outline: 1px solid #2a2d36;
+}
+.tema .nombre {
+  font-family: "Orbitron", sans-serif;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-align: center;
+}
+.tema:hover,
+.tema:focus-visible {
+  border-color: #5a5e68;
+}
+.tema.sel {
+  border-color: var(--primario);
+  color: var(--primario);
+}
+.monitor {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border: 2px solid #3a3d46;
+  background: #0e1016;
+}
+.zona {
+  position: absolute;
+  background: #2a2d36;
+  outline: none;
+  transition: background-color 0.2s;
+}
+.zona:hover,
+.zona:focus-visible {
+  background: #4a4e5a;
+}
+.zona.left {
+  left: 0;
+  top: 10%;
+  width: 9%;
+  height: 80%;
+}
+.zona.top {
+  top: 0;
+  left: 15%;
+  width: 70%;
+  height: 12%;
+}
+.zona.right {
+  right: 0;
+  top: 10%;
+  width: 9%;
+  height: 80%;
+}
+.zona.sel {
+  background: var(--primario);
+}
+.nombre-borde {
+  margin-top: 8px;
+  text-align: center;
+  font-family: "Orbitron", sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--primario);
+}
+
+/* Instalando */
+.barra-seg {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 16px;
+}
+.barra-seg i {
+  flex: 1;
+  height: 14px;
+  background: #1b1e26;
+}
+.barra-seg i.on {
+  background: var(--secundario);
+}
+.registro {
+  height: 110px;
+  overflow: hidden;
+}
+.linea {
+  line-height: 1.7;
+}
+.ok {
+  color: var(--secundario);
+}
+.error-msg,
+.botones-error {
+  display: none;
+}
+.instalando.fallo h1 {
+  color: var(--alerta);
+}
+.instalando.fallo h1 .pct,
+.instalando.fallo .barra-seg,
+.instalando.fallo .registro {
+  display: none;
+}
+.instalando.fallo .error-msg {
+  display: block;
+  margin: 0;
+  color: #bfc3c9;
+  line-height: 1.6;
+}
+.instalando.fallo .botones-error {
+  display: flex;
+}
+
+/* Arranque */
+.arranque {
+  flex-direction: row;
+  gap: 28px;
+  padding: 36px 32px 0;
+}
+.arr-logo {
+  flex: none;
+  width: 96px;
+  height: 96px;
+}
+.arr-nombre {
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  font-size: 30px;
+  letter-spacing: 0.1em;
+  color: var(--primario);
+  white-space: pre;
+}
+.arr-sub {
+  font-family: "Orbitron", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.25em;
+  color: var(--secundario);
+  margin: 4px 0 18px;
+}
+.tr {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: trazar calc(0.25s * var(--k)) linear forwards;
+}
+.tr.marco {
+  animation-duration: calc(0.8s * var(--k));
+}
+.tr.n1 {
+  animation-delay: calc(0.8s * var(--k));
+}
+.tr.n2 {
+  animation-delay: calc(1s * var(--k));
+}
+.tr.n3 {
+  animation-delay: calc(1.2s * var(--k));
+}
+@keyframes trazar {
+  to {
+    stroke-dashoffset: 0;
+  }
+}

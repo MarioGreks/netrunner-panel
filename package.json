@@ -1,13 +1,17 @@
 {
   "name": "netrunner-panel",
   "private": true,
-  "version": "1.4.0",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "tauri": "tauri",
-    "release:preparar": "node scripts/preparar-release.mjs"
+    "release:preparar": "node scripts/preparar-release.mjs",
+    "instalador:construir": "node scripts/construir-instalador.mjs",
+    "instalador:dev": "vite --config instalador/vite.config.ts",
+    "instalador:build": "tsc && vite build --config instalador/vite.config.ts",
+    "instalador:tauri": "cd instalador/src-tauri && tauri"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.3.0",

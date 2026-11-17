@@ -79,7 +79,7 @@ def lateral(version):
     d.line([(20, 202), (w - 20, 202)], fill=CIAN)
     d.rectangle([(20, 200), (26, 204)], fill=CIAN)
     d.text((20, 212), "OS_SYSTEM", font=f_p, fill=GRIS)
-    d.text((20, 227), "INSTALL // 0x13", font=f_p, fill=CIAN)
+    d.text((20, 227), "INSTALL // 0x14", font=f_p, fill=CIAN)
     d.text((20, 242), "USER_MODE: OK", font=f_p, fill=GRIS)
     return img.convert("RGB")
 

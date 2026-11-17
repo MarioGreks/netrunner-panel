@@ -46,7 +46,7 @@ Está hecho con Tauri 2, Rust y TypeScript sin framework.
 1. Descarga `Netrunner-Panel-Setup.exe` desde la última release del repositorio.
 2. Ejecútalo. Se instala solo para tu usuario, sin permisos de administrador.
 3. El instalador no está firmado, así que Windows SmartScreen puede avisar. Pulsa **Más información** y después **Ejecutar de todas formas**.
-4. Desde la 1.3.0 la app se actualiza sola: comprueba si hay versión nueva al arrancar y cada 6 horas, y también puedes pulsar **BUSCAR ACTUALIZACIONES** en AJUSTES → SISTEMA.
+4. Desde la 1.4.0 la app se actualiza sola: comprueba si hay versión nueva al arrancar y cada 6 horas, y también puedes pulsar **BUSCAR ACTUALIZACIONES** en AJUSTES → SISTEMA.
 
 ## Configuración básica
 

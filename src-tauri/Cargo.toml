@@ -1,6 +1,6 @@
 [package]
 name = "netrunner-panel"
-version = "1.2.0"
+version = "1.3.0"
 description = "Panel de escritorio estilo cyberpunk HUD"
 edition = "2021"
 

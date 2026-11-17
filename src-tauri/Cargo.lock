@@ -2323,7 +2323,7 @@ dependencies = [
 
 [[package]]
 name = "netrunner-panel"
-version = "1.2.0"
+version = "1.3.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",

@@ -66,7 +66,8 @@ ejecutar("npm", ["run", "instalador:build"], { env });
 paso(3, "Compilando el exe del instalador con el NSIS incrustado (cargo build --release)");
 const crate = join(raiz, "instalador", "src-tauri");
 const envCargo = { ...env, NETRUNNER_NSIS_SETUP: nsis };
-const argsCargo = ["build", "--release"];
+// custom-protocol: la interfaz va dentro del exe (sin ella cargaría localhost:1430)
+const argsCargo = ["build", "--release", "--features", "custom-protocol"];
 if (ligero) {
   argsCargo.push("-j", "1");
   envCargo.CARGO_PROFILE_RELEASE_LTO = "false";

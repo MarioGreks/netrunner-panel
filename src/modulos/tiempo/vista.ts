@@ -19,6 +19,7 @@ import {
   type HoraMeteo,
 } from "../../lib/ipc";
 import { abrirAjustes, alIrAEvento, tomarEventoPendiente } from "../../lib/navegacion";
+import { alCambiarTiraRemota, recordarTira, tiraAbiertaGuardada } from "../../lib/interfaz";
 import { iconoMeteo } from "../../lib/iconos-meteo";
 import { colorCategoria } from "../../lib/categorias";
 
@@ -110,7 +111,7 @@ function agrupar(eventos: EventoCalendario[], ahora: Date): Map<number, Linea[]>
   return new Map([...grupos.entries()].sort((a, b) => a[0] - b[0]));
 }
 
-/** METEO plegada o desplegada: se recuerda mientras la app está abierta (sobrevive a cambiar de pestaña). */
+/** METEO plegada o desplegada. El estado vive en lib/interfaz (se guarda y se sincroniza entre equipos); esta copia es la del módulo. */
 let tiraAbierta = false;
 
 /** Gráfica de 24 h en SVG: temperatura (línea y relleno, primario), lluvia (barras, secundario),
@@ -178,6 +179,7 @@ function grafica24h(horas: HoraMeteo[]): string {
 }
 
 export function montar(contenedor: HTMLElement): void {
+  tiraAbierta = tiraAbiertaGuardada();
   contenedor.innerHTML = `
     <div class="tmp">
       <section class="marco marco--cian tmp__tira" data-id="meteo"></section>
@@ -332,14 +334,19 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
       </div>`;
   };
 
-  // El clic en la tira (salvo en el botón de configurar) la despliega o pliega en el sitio
-  tira.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest("[data-accion]") || !meteo?.ciudad) return;
-    tiraAbierta = !tiraAbierta;
+  const pintarTiraAbierta = () => {
     tira.classList.toggle("tmp__tira--abierta", tiraAbierta);
     tira.setAttribute("aria-expanded", String(tiraAbierta));
     const flecha = tira.querySelector(".tmp__t-flecha");
     if (flecha) flecha.textContent = tiraAbierta ? "▴" : "▾";
+  };
+
+  // El clic en la tira (salvo en el botón de configurar) la despliega o pliega en el sitio
+  tira.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest("[data-accion]") || !meteo?.ciudad) return;
+    tiraAbierta = !tiraAbierta;
+    recordarTira(tiraAbierta);
+    pintarTiraAbierta();
   });
 
   // --- Agenda ---
@@ -782,6 +789,14 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
       if (!comprobar()) return;
       outlook = e;
       pintarNuevoBtn();
+    }),
+  );
+  // La tira se plegó o desplegó en el otro equipo
+  suscripciones.push(
+    alCambiarTiraRemota((abierta) => {
+      if (!comprobar()) return;
+      tiraAbierta = abierta;
+      pintarTiraAbierta();
     }),
   );
   suscribir(alEvento("panel://mostrar", () => {

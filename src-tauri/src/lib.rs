@@ -1,9 +1,11 @@
 mod accesos;
+mod ajustes;
 mod bandeja;
 mod calendario;
 mod config;
 mod cuentas;
 mod estado;
+mod interfaz;
 mod meteo;
 mod microsoft;
 mod musica;
@@ -11,6 +13,7 @@ mod notas;
 mod outlook;
 mod pantalla_completa;
 mod sistema;
+mod sync;
 mod ventanas;
 
 use estado::Estado;
@@ -58,6 +61,8 @@ pub fn run() {
             notas::borrar_nota,
             notas::sincronizar_notas,
             notas::carpeta_onedrive,
+            interfaz::estado_interfaz,
+            interfaz::guardar_interfaz,
             musica::estado_musica,
             musica::musica_alternar,
             musica::musica_siguiente,
@@ -84,6 +89,8 @@ pub fn run() {
             ventanas::preparar(&handle);
             sistema::iniciar(&handle);
             cuentas::iniciar(&handle);
+            interfaz::iniciar(&handle);
+            ajustes::iniciar(&handle);
             microsoft::iniciar(&handle);
             calendario::iniciar(&handle);
             meteo::iniciar(&handle);

@@ -5,8 +5,12 @@
 //! fusiona elemento a elemento (por id) en lugar de quedarse con el archivo más nuevo,
 //! de modo que cambios distintos hechos en dos equipos no se pisan. Los borrados se
 //! guardan como marcas (`borrada`) durante 30 días para que se propaguen.
+//!
+//! Este módulo también aloja el **planificador único** de la sincronización entre
+//! equipos: cada ejecución sincroniza notas y tareas, cuentas atrás, interfaz y
+//! ajustes compartidos (ver `sincronizar`). Los disparadores son el cambio de datos
+//! (2 s después), mostrar el panel, un temporizador de 5 min y el comando manual.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -17,12 +21,11 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Listener, Manager};
 
 use crate::estado::Estado;
+use crate::sync::{self, ahora_ms, escribir_atomico, fusionar_lista, VIDA_MARCAS_MS};
 
 const INTERVALO_SYNC: Espera = Espera::from_secs(300);
 const RETARDO_CAMBIO: Espera = Espera::from_secs(2);
 const EDAD_MAX_AL_MOSTRAR: Espera = Espera::from_secs(30);
-const VIDA_MARCAS_MS: i64 = 30 * 24 * 3600 * 1000;
-const SUBCARPETA: &str = "netrunner-panel";
 const ARCHIVO: &str = "notas.json";
 
 // ---------------------------------------------------------------------------
@@ -88,52 +91,9 @@ pub struct Notas {
     generacion: AtomicU64,
 }
 
-fn ahora_ms() -> i64 {
-    chrono::Utc::now().timestamp_millis()
-}
-
 // ---------------------------------------------------------------------------
 // Lógica pura: fusión y purga
 // ---------------------------------------------------------------------------
-
-/// Elige entre dos versiones del mismo elemento: gana la `modificada` más reciente;
-/// si empatan, gana la versión borrada; si siguen empatadas, se conserva la local.
-fn gana_remota(l_mod: i64, l_borr: bool, r_mod: i64, r_borr: bool) -> bool {
-    if r_mod != l_mod {
-        r_mod > l_mod
-    } else {
-        r_borr && !l_borr
-    }
-}
-
-fn fusionar_lista<T: Clone>(
-    local: &[T],
-    remoto: &[T],
-    id: impl Fn(&T) -> &str,
-    info: impl Fn(&T) -> (i64, bool),
-) -> Vec<T> {
-    let mut resultado: Vec<T> = local.to_vec();
-    let mut indice: HashMap<String, usize> = HashMap::new();
-    for (i, e) in resultado.iter().enumerate() {
-        indice.insert(id(e).to_string(), i);
-    }
-    for r in remoto {
-        match indice.get(id(r)) {
-            Some(&i) => {
-                let (lm, lb) = info(&resultado[i]);
-                let (rm, rb) = info(r);
-                if gana_remota(lm, lb, rm, rb) {
-                    resultado[i] = r.clone();
-                }
-            }
-            None => {
-                indice.insert(id(r).to_string(), resultado.len());
-                resultado.push(r.clone());
-            }
-        }
-    }
-    resultado
-}
 
 /// Fusiona dos conjuntos de datos por id y elemento a elemento.
 pub fn fusionar(local: &Datos, remoto: &Datos) -> Datos {
@@ -150,51 +110,14 @@ pub fn purgar(datos: &mut Datos, ahora: i64) {
     datos.notas.retain(|n| !(n.borrada && n.modificada < limite));
 }
 
-// ---------------------------------------------------------------------------
-// Archivos: escritura atómica, lectura del remoto y sincronización
-// ---------------------------------------------------------------------------
-
-/// Escribe en un archivo temporal contiguo y lo renombra sobre el destino.
-pub fn escribir_atomico(ruta: &Path, datos: &Datos) -> Result<(), String> {
-    let dir = ruta.parent().ok_or("ruta sin carpeta")?;
-    std::fs::create_dir_all(dir).map_err(|e| format!("no se pudo crear la carpeta: {e}"))?;
-    let json = serde_json::to_string_pretty(datos).map_err(|e| e.to_string())?;
-    let tmp = ruta.with_extension(format!("tmp{}", std::process::id()));
-    let res = std::fs::write(&tmp, json).and_then(|_| std::fs::rename(&tmp, ruta));
-    if let Err(e) = res {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("no se pudo escribir: {e}"));
-    }
-    Ok(())
-}
-
-/// Lee el archivo remoto. `Ok(None)` si no existe; error si está bloqueado o corrupto.
-pub fn leer_remoto(ruta: &Path) -> Result<Option<Datos>, String> {
-    let texto = match std::fs::read_to_string(ruta) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(_) => return Err("Archivo remoto no accesible".into()),
-    };
-    serde_json::from_str::<Datos>(&texto)
-        .map(Some)
-        .map_err(|_| "Archivo remoto corrupto: no se sobrescribe".to_string())
-}
-
-fn ruta_remota(carpeta: &str) -> PathBuf {
-    Path::new(carpeta).join(SUBCARPETA).join(ARCHIVO)
-}
-
 /// Lee el remoto, fusiona con `local`, purga y escribe el resultado en el remoto.
 /// Si el remoto no se puede leer, no se escribe nada y se devuelve el error.
 pub fn sincronizar_con(local: &Datos, remoto: &Path, ahora: i64) -> Result<Datos, String> {
-    let fusionado = match leer_remoto(remoto)? {
-        Some(r) => fusionar(local, &r),
-        None => local.clone(),
-    };
-    let mut fusionado = fusionado;
-    purgar(&mut fusionado, ahora);
-    escribir_atomico(remoto, &fusionado)?;
-    Ok(fusionado)
+    sync::sincronizar_con(local, remoto, ahora, fusionar, purgar)
+}
+
+fn ruta_remota(carpeta: &str) -> PathBuf {
+    sync::ruta_remota(carpeta, ARCHIVO)
 }
 
 // ---------------------------------------------------------------------------
@@ -271,11 +194,15 @@ fn modificar(app: &AppHandle, cambio: impl FnOnce(&mut Datos)) -> Result<(), Str
     Ok(())
 }
 
-fn programar_sync(app: &AppHandle) {
+/// Programa una sincronización 2 s después del último cambio (de cualquier módulo).
+pub(crate) fn programar_sync(app: &AppHandle) {
     if carpeta_configurada(app).is_none() {
         return;
     }
-    let gen = app.state::<Notas>().generacion.fetch_add(1, Ordering::SeqCst) + 1;
+    // Aún no registrado si el cambio llega durante el arranque (la sincronización
+    // periódica se encargará)
+    let Some(n) = app.try_state::<Notas>() else { return };
+    let gen = n.generacion.fetch_add(1, Ordering::SeqCst) + 1;
     let h = app.clone();
     thread::spawn(move || {
         thread::sleep(RETARDO_CAMBIO);
@@ -283,6 +210,21 @@ fn programar_sync(app: &AppHandle) {
             sincronizar(&h);
         }
     });
+}
+
+/// Paso de notas y tareas: fusiona con el remoto y guarda el resultado en local.
+fn sincronizar_paso(app: &AppHandle, carpeta: &str) -> Result<(), String> {
+    let n = app.state::<Notas>();
+    let local = n.interno.lock().unwrap().datos.clone();
+    let fusionado = sincronizar_con(&local, &ruta_remota(carpeta), ahora_ms())?;
+    let mut i = n.interno.lock().unwrap();
+    // Puede haber cambios locales hechos durante la sincronización: se fusionan de
+    // nuevo (es idempotente) y se purga.
+    let mut datos = fusionar(&i.datos, &fusionado);
+    purgar(&mut datos, ahora_ms());
+    guardar_local(app, &datos)?;
+    i.datos = datos;
+    Ok(())
 }
 
 /// Lanza una sincronización en segundo plano. Si ya hay una en curso, solo anota que
@@ -316,29 +258,23 @@ pub fn sincronizar(app: &AppHandle) {
 
     let app = app.clone();
     thread::spawn(move || {
+        // Cada archivo es un paso independiente: si uno falla (remoto corrupto o
+        // bloqueado) se anota un error breve y los demás se sincronizan igualmente.
+        let pasos: Vec<sync::Paso> = vec![
+            ("notas", Box::new(|| sincronizar_paso(&app, &carpeta))),
+            ("cuentas", Box::new(|| crate::cuentas::sincronizar(&app, &carpeta))),
+            ("interfaz", Box::new(|| crate::interfaz::sincronizar(&app, &carpeta))),
+            ("ajustes", Box::new(|| crate::ajustes::sincronizar(&app, &carpeta))),
+        ];
+        let (bien, errores) = sync::ejecutar_pasos(pasos);
         let n = app.state::<Notas>();
-        let local = n.interno.lock().unwrap().datos.clone();
-        let resultado = sincronizar_con(&local, &ruta_remota(&carpeta), ahora_ms());
         let repetir = {
             let mut i = n.interno.lock().unwrap();
             i.sincronizando = false;
-            match resultado {
-                Ok(fusionado) => {
-                    // Puede haber cambios locales hechos durante la sincronización: se
-                    // fusionan de nuevo (es idempotente) y se purga.
-                    let mut datos = fusionar(&i.datos, &fusionado);
-                    purgar(&mut datos, ahora_ms());
-                    match guardar_local(&app, &datos) {
-                        Ok(()) => {
-                            i.datos = datos;
-                            i.ultima_sync = Some(ahora_ms());
-                            i.error = None;
-                        }
-                        Err(e) => i.error = Some(e),
-                    }
-                }
-                Err(e) => i.error = Some(e),
+            if bien > 0 {
+                i.ultima_sync = Some(ahora_ms());
             }
+            i.error = if errores.is_empty() { None } else { Some(errores.join(" · ")) };
             std::mem::take(&mut i.pendiente)
         };
         emitir(&app);
@@ -475,6 +411,7 @@ pub fn iniciar(app: &AppHandle) {
 #[cfg(test)]
 mod pruebas {
     use super::*;
+    use crate::sync::leer_remoto;
 
     fn tarea(id: &str, texto: &str, modificada: i64, borrada: bool) -> Tarea {
         Tarea { id: id.into(), texto: texto.into(), modificada, borrada, ..Default::default() }
@@ -565,11 +502,11 @@ mod pruebas {
         let datos = datos_t(vec![tarea("a", "hola ñandú", 10, false)]);
         escribir_atomico(&ruta, &datos).unwrap();
         escribir_atomico(&ruta, &datos).unwrap(); // sobrescribir también funciona
-        assert_eq!(leer_remoto(&ruta).unwrap(), Some(datos));
+        assert_eq!(leer_remoto::<Datos>(&ruta).unwrap(), Some(datos));
         // No quedan temporales
         let restos = std::fs::read_dir(ruta.parent().unwrap()).unwrap().count();
         assert_eq!(restos, 1);
-        assert_eq!(leer_remoto(&dir.join("no_existe.json")).unwrap(), None);
+        assert_eq!(leer_remoto::<Datos>(&dir.join("no_existe.json")).unwrap(), None);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -587,12 +524,12 @@ mod pruebas {
     #[test]
     fn sincronizar_fusiona_y_escribe_el_remoto() {
         let dir = dir_temporal("sync");
-        let ruta = dir.join(SUBCARPETA).join(ARCHIVO);
+        let ruta = dir.join(sync::SUBCARPETA).join(ARCHIVO);
         escribir_atomico(&ruta, &datos_t(vec![tarea("b", "remota", 20, false)])).unwrap();
         let local = datos_t(vec![tarea("a", "local", 10, false)]);
         let res = sincronizar_con(&local, &ruta, 1000).unwrap();
         assert_eq!(res.tareas.len(), 2);
-        assert_eq!(leer_remoto(&ruta).unwrap().unwrap().tareas.len(), 2);
+        assert_eq!(leer_remoto::<Datos>(&ruta).unwrap().unwrap().tareas.len(), 2);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -1,4 +1,4 @@
-// Pantalla AJUSTES: apariencia, panel, calendario, correo, cuentas (avanzado), meteo, notas y sistema. No es una pestaña de la
+// Pantalla AJUSTES: apariencia, panel, calendario, correo, cuentas (avanzado), meteo, sincronización entre equipos y sistema. No es una pestaña de la
 // barra: se abre con el engranaje de la cabecera y se cierra con VOLVER o Esc.
 import { getVersion } from "@tauri-apps/api/app";
 import { abrirCarpetaDatos, alEvento, obtenerConfig, type Borde } from "../../lib/ipc";
@@ -42,7 +42,7 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
         ${seccion("cuentas", "CUENTAS", "MS // 0x07")}
       </details>
       ${seccion("meteo", "METEO", "GEO // 0x04", "marco--cian")}
-      ${seccion("notas", "NOTAS", "SYNC // 0x05")}
+      ${seccion("notas", "SINCRONIZACIÓN ENTRE EQUIPOS", "SYNC // 0x05")}
       ${seccion("sistema", "SISTEMA", "SYS // 0x06")}
     </div>`;
 
@@ -221,15 +221,41 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
   });
 
   // --- Formularios compartidos ---
+  const montados = new Map<SeccionAjustes, Formulario>();
   const meter = (id: SeccionAjustes, f: Formulario) => {
     formularios.push(f);
+    montados.set(id, f);
     q(id).appendChild(f.el);
   };
-  meter("calendario", formularioIcs());
-  meter("correo", formularioCorreo());
-  meter("cuentas", formularioCuentasMs());
-  meter("meteo", formularioCiudad());
-  meter("notas", formularioCarpeta());
+  const FABRICAS: [SeccionAjustes, () => Formulario][] = [
+    ["calendario", formularioIcs],
+    ["correo", formularioCorreo],
+    ["cuentas", formularioCuentasMs],
+    ["meteo", formularioCiudad],
+    ["notas", formularioCarpeta],
+  ];
+  FABRICAS.forEach(([id, fabrica]) => meter(id, fabrica()));
+
+  // Llegan ajustes de otro equipo (URL del calendario, ciudad, filtros de correo): se
+  // recargan los formularios afectados, salvo el que el usuario esté editando.
+  const REMOTOS: SeccionAjustes[] = ["calendario", "correo", "meteo"];
+  void alEvento("ajustes://cambio", () => {
+    if (!vivo) return;
+    for (const id of REMOTOS) {
+      const cuerpo = q(id);
+      if (cuerpo.contains(document.activeElement)) continue;
+      const viejo = montados.get(id);
+      const fabrica = FABRICAS.find(([i]) => i === id)?.[1];
+      if (!viejo || !fabrica) continue;
+      viejo.destruir();
+      formularios.splice(formularios.indexOf(viejo), 1);
+      cuerpo.replaceChildren();
+      meter(id, fabrica());
+    }
+  }).then((un) => {
+    if (vivo) unlistens.push(un);
+    else un();
+  });
 
   // --- SISTEMA: versión y datos locales ---
   const cuerpoSistema = q("sistema");

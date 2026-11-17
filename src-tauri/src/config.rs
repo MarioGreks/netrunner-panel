@@ -116,15 +116,20 @@ impl Config {
         };
         limpiar_lista(&mut self.correo_vip);
         limpiar_lista(&mut self.correo_palabras);
-        self.etiquetas_cuentas_correo.retain(|k, v| {
-            *v = v.trim().to_string();
-            !k.trim().is_empty() && !v.is_empty()
-        });
+        limpiar_etiquetas(&mut self.etiquetas_cuentas_correo);
     }
 }
 
+/// Recorta las etiquetas y descarta las entradas con clave o etiqueta vacía.
+pub(crate) fn limpiar_etiquetas(e: &mut HashMap<String, String>) {
+    e.retain(|k, v| {
+        *v = v.trim().to_string();
+        !k.trim().is_empty() && !v.is_empty()
+    });
+}
+
 /// Quita espacios y vacíos y elimina repetidos (sin distinguir mayúsculas), conservando el orden.
-fn limpiar_lista(lista: &mut Vec<String>) {
+pub(crate) fn limpiar_lista(lista: &mut Vec<String>) {
     let mut vistos: Vec<String> = Vec::new();
     lista.retain_mut(|t| {
         *t = t.trim().to_string();
@@ -187,39 +192,69 @@ pub fn get_config(estado: State<Estado>) -> Config {
 }
 
 #[tauri::command]
-pub fn set_config(app: AppHandle, estado: State<Estado>, mut config: Config) -> Result<(), String> {
-    config.normalizar();
-    // Las cuentas las gestiona solo el módulo Microsoft: un formulario con una copia
-    // antigua de la configuración no debe pisarlas.
-    config.cuentas_ms = estado.config.lock().unwrap().cuentas_ms.clone();
-    guardar(&app, &config)?;
-    let anterior = std::mem::replace(&mut *estado.config.lock().unwrap(), config.clone());
-    sincronizar_autoarranque(&app, config.autostart);
-    ventanas::reposicionar(&app);
-    let _ = app.emit("config://cambio", config.edge);
-    if anterior.tema != config.tema || anterior.opacidad != config.opacidad {
-        let _ = app.emit(
-            "tema://cambio",
-            serde_json::json!({ "tema": config.tema, "opacidad": config.opacidad }),
-        );
+pub fn set_config(app: AppHandle, config: Config) -> Result<(), String> {
+    aplicar(&app, Origen::Usuario, move |_| config)
+}
+
+/// Quién cambia la configuración.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Origen {
+    /// El formulario de AJUSTES (o la bandeja): se aplica todo y se anotan las marcas de
+    /// tiempo de los ajustes compartidos.
+    Usuario,
+    /// Valores llegados de otro equipo por la sincronización: solo se aplican los efectos
+    /// de los ajustes compartidos y no se programa otra sincronización (evita bucles).
+    Remoto,
+}
+
+/// Único camino para cambiar la configuración. `cambio` recibe la configuración actual y
+/// devuelve la nueva; se ejecuta con el bloqueo tomado, así que ningún otro cambio se
+/// pierde entre la lectura y la escritura. Después reacciona a lo que cambió.
+pub fn aplicar(app: &AppHandle, origen: Origen, cambio: impl FnOnce(&Config) -> Config) -> Result<(), String> {
+    let estado = app.state::<Estado>();
+    let (anterior, config) = {
+        let mut actual = estado.config.lock().unwrap();
+        let mut config = cambio(&actual);
+        config.normalizar();
+        // Las cuentas las gestiona solo el módulo Microsoft: un formulario con una copia
+        // antigua de la configuración no debe pisarlas.
+        config.cuentas_ms = actual.cuentas_ms.clone();
+        guardar(app, &config)?;
+        (std::mem::replace(&mut *actual, config.clone()), config)
+    };
+    if origen == Origen::Usuario {
+        sincronizar_autoarranque(app, config.autostart);
+        ventanas::reposicionar(app);
+        let _ = app.emit("config://cambio", config.edge);
+        if anterior.tema != config.tema || anterior.opacidad != config.opacidad {
+            let _ = app.emit(
+                "tema://cambio",
+                serde_json::json!({ "tema": config.tema, "opacidad": config.opacidad }),
+            );
+        }
     }
     if anterior.ics_url != config.ics_url {
-        crate::calendario::sincronizar(&app);
+        crate::calendario::sincronizar(app);
     }
     if anterior.ciudad != config.ciudad {
-        crate::meteo::actualizar(&app);
+        crate::meteo::actualizar(app);
     }
-    if anterior.carpeta_sync != config.carpeta_sync {
-        crate::notas::sincronizar(&app);
-    }
-    if !anterior.outlook_auto && config.outlook_auto {
-        crate::outlook::activar_auto(&app);
+    if origen == Origen::Usuario {
+        if anterior.carpeta_sync != config.carpeta_sync {
+            crate::notas::sincronizar(app);
+        }
+        if !anterior.outlook_auto && config.outlook_auto {
+            crate::outlook::activar_auto(app);
+        }
+        // Anota la marca de tiempo de los ajustes compartidos que cambiaron y programa
+        // la sincronización
+        crate::ajustes::cambios_locales(app, &anterior, &config);
     }
     if anterior.correo_vip != config.correo_vip
         || anterior.correo_palabras != config.correo_palabras
         || anterior.etiquetas_cuentas_correo != config.etiquetas_cuentas_correo
     {
-        crate::outlook::refiltrar(&app);
+        crate::outlook::refiltrar(app);
     }
     Ok(())
 }

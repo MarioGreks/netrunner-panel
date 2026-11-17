@@ -199,6 +199,17 @@ export const borrarNota = (id: string) => invoke<void>("borrar_nota", { id });
 export const carpetaOnedrive = () => invoke<string | null>("carpeta_onedrive");
 export const sincronizarNotas = () => invoke<void>("sincronizar_notas");
 
+export interface EstadoInterfaz {
+  tira_meteo_abierta: boolean;
+  ultima_pestana: string;
+  /** Milisegundos UTC */
+  modificada: number;
+}
+
+export const estadoInterfaz = () => invoke<EstadoInterfaz>("estado_interfaz");
+export const guardarInterfaz = (tiraMeteoAbierta: boolean, ultimaPestana: string) =>
+  invoke<void>("guardar_interfaz", { tiraMeteoAbierta, ultimaPestana });
+
 export interface EstadoMusica {
   titulo: string;
   artista: string;
@@ -315,6 +326,8 @@ export type EventoPanel =
   | "cuentas_ms://estado"
   | "meteo://estado"
   | "notas://estado"
+  | "interfaz://estado"
+  | "ajustes://cambio"
   | "musica://estado"
   | "accesos://estado"
   | "correo://estado";

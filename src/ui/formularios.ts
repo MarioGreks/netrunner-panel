@@ -180,7 +180,7 @@ export function formularioCiudad(): Formulario {
   };
 }
 
-// --- Carpeta de OneDrive para las notas ---
+// --- Carpeta de OneDrive para sincronizar el panel entre equipos ---
 export function formularioCarpeta(): Formulario {
   const el = crear(`
     <div class="fm__etiqueta">CARPETA DE ONEDRIVE</div>
@@ -190,6 +190,7 @@ export function formularioCarpeta(): Formulario {
       <button class="fm__btn fm__btn--peligro" data-id="desactivar" type="button">DESACTIVAR</button>
       <button class="fm__btn fm__btn--ok" data-id="ahora" type="button">SINCRONIZAR AHORA</button>
     </div>
+    <div class="fm__ayuda">Se sincroniza con la misma carpeta en todos tus equipos: tareas y notas, cuentas atrás (★), si METEO está desplegada y la última pestaña, y los ajustes de correo (VIP y palabras clave), etiquetas de cuentas, ciudad y URL del calendario. La URL del calendario queda guardada en tu OneDrive. No se sincronizan: borde, inicio con Windows, tema y opacidad, pausa del borde, Outlook automático, pantalla completa, cuentas Microsoft ni la propia carpeta.</div>
     <div class="fm__aviso"></div>`);
   const aviso = avisador(el);
   const ruta = q(el, "carpeta");
@@ -221,7 +222,7 @@ export function formularioCarpeta(): Formulario {
       const inicio = actual ?? (await carpetaOnedrive()) ?? undefined;
       // El selector nativo roba el foco: se avisa para que el panel no se oculte
       bloqueo.dialogoAbierto = true;
-      const elegida = await open({ directory: true, multiple: false, defaultPath: inicio, title: "Carpeta de OneDrive para las notas" });
+      const elegida = await open({ directory: true, multiple: false, defaultPath: inicio, title: "Carpeta de OneDrive para sincronizar el panel" });
       if (typeof elegida === "string" && elegida) await cambiar(elegida);
     } catch {
       aviso("No se pudo abrir el selector de carpetas", true);

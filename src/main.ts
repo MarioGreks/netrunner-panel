@@ -12,6 +12,7 @@ import "./styles/ajustes.css";
 import { alEvento, estadoCorreo, obtenerConfig, ocultarPanel, type Borde, type EstadoCorreo } from "./lib/ipc";
 import { iniciarTema } from "./lib/tema";
 import { bloqueo } from "./lib/bloqueo";
+import { cargarInterfaz, recordarPestana } from "./lib/interfaz";
 import { alAbrirAjustes, pedirIrAEvento, type SeccionAjustes } from "./lib/navegacion";
 import { fijarContador, montarPestanas } from "./ui/pestanas";
 import { montarEnlace } from "./ui/enlace";
@@ -65,6 +66,8 @@ getVersion()
 // --- Vistas: un módulo de la barra o la pantalla AJUSTES ---
 let idActual = "sistema";
 let cerrarAjustes: (() => void) | null = null;
+// La pestaña inicial (restaurada del estado guardado) no cuenta como un cambio del usuario
+let pestanaInicialLista = false;
 
 const salirDeAjustes = () => {
   cerrarAjustes?.();
@@ -76,6 +79,7 @@ const salirDeAjustes = () => {
 const activar = montarPestanas(barra, (id) => {
   salirDeAjustes();
   idActual = id;
+  if (pestanaInicialLista) recordarPestana(id);
   contenido.replaceChildren();
   MODULOS[id](contenido);
 });
@@ -172,4 +176,8 @@ estadoCorreo().then(pintarContador).catch(() => {});
 alEvento<Borde>("config://cambio", aplicarBorde);
 
 obtenerConfig().then((c) => aplicarBorde(c.edge));
-activar("tiempo");
+// Pestaña y tira METEO guardadas (compartidas entre equipos); sin estado válido, METEO
+void cargarInterfaz().then((id) => {
+  activar(Object.prototype.hasOwnProperty.call(MODULOS, id) ? id : "tiempo");
+  pestanaInicialLista = true;
+});

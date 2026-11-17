@@ -30,6 +30,7 @@ La lista sale de `cargo metadata --format-version 1 --manifest-path src-tauri/Ca
 | tauri-plugin-autostart | 2.7.0 | Apache-2.0 OR MIT |
 | tauri-plugin-dialog | 2.8.4 | Apache-2.0 OR MIT |
 | tauri-plugin-single-instance | 2.5.5 | Apache-2.0 OR MIT |
+| tauri-plugin-updater | 2.14.1 | Apache-2.0 OR MIT |
 | url | 2.5.8 | MIT OR Apache-2.0 |
 | uuid | 1.29.2 | Apache-2.0 OR MIT |
 | windows | 0.62.2 | MIT OR Apache-2.0 |
@@ -89,6 +90,10 @@ Además, algunas expresiones duales ofrecen como alternativa licencias como Unli
 ### Licencia MPL-2.0
 
 Hay 7 paquetes transitivos con MPL-2.0. Se usan sin modificar; su código fuente está disponible en crates.io y en los repositorios de cada paquete.
+
+### Instalador HUD (`instalador/src-tauri`)
+
+Desde la 1.5.0 el `Netrunner-Panel-Setup.exe` es un programa propio que lleva dentro el instalador NSIS de la app. Sus dependencias directas son `tauri` (Apache-2.0 OR MIT), `serde` y `serde_json` (MIT OR Apache-2.0) y `winreg` 0.56 (MIT). Según `cargo metadata --manifest-path instalador/src-tauri/Cargo.toml`, arrastran 427 paquetes, todos un subconjunto de las familias de licencias de arriba. Entre ellos están los mismos paquetes MPL-2.0 de Tauri (`cssparser`, `selectors`, `dtoa-short`, `option-ext`), que se usan sin modificar.
 
 ## Dependencias de npm (producción)
 

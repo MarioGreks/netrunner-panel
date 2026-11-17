@@ -46,6 +46,7 @@ Está hecho con Tauri 2, Rust y TypeScript sin framework.
 1. Descarga `Netrunner-Panel-Setup.exe` desde la última release del repositorio.
 2. Ejecútalo. Se instala solo para tu usuario, sin permisos de administrador.
 3. El instalador no está firmado, así que Windows SmartScreen puede avisar. Pulsa **Más información** y después **Ejecutar de todas formas**.
+4. Desde la 1.3.0 la app se actualiza sola: comprueba si hay versión nueva al arrancar y cada 6 horas, y también puedes pulsar **BUSCAR ACTUALIZACIONES** en AJUSTES → SISTEMA.
 
 ## Configuración básica
 
@@ -86,6 +87,29 @@ npm run tauri build    # genera el instalador NSIS
 ```
 
 El instalador queda en `src-tauri/target/release/bundle/nsis/`.
+
+## Publicar una versión
+
+1. Sube el número de versión en los tres ficheros: `package.json`, `src-tauri/Cargo.toml` y `src-tauri/tauri.conf.json`.
+2. Compila firmando con la clave del actualizador (fuera del repositorio):
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = "$HOME\.tauri\netrunner-panel.key"
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
+npm run tauri build
+```
+
+3. Prepara los ficheros de la release (crea `release/` con el instalador y `latest.json`):
+
+```
+npm run release:preparar -- --notas "Qué hay de nuevo"
+```
+
+4. Publica la release con ambos ficheros:
+
+```
+gh release create v<versión> release/Netrunner-Panel-Setup.exe release/latest.json
+```
 
 ## Estructura
 

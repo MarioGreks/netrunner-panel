@@ -1,4 +1,5 @@
 mod accesos;
+mod actualizador;
 mod bandeja;
 mod calendario;
 mod config;
@@ -29,6 +30,7 @@ pub fn run() {
             Some(vec!["--oculto"]),
         ))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             config::get_config,
             config::set_config,
@@ -74,6 +76,10 @@ pub fn run() {
             outlook::abrir_outlook,
             outlook::categorias_outlook,
             outlook::crear_evento,
+            actualizador::buscar_actualizacion,
+            actualizador::info_actualizacion,
+            actualizador::instalar_actualizacion,
+            actualizador::posponer_actualizacion,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -91,6 +97,7 @@ pub fn run() {
             musica::iniciar(&handle);
             accesos::iniciar(&handle);
             outlook::iniciar(&handle);
+            actualizador::iniciar(&handle);
             bandeja::crear(&handle)?;
             ventanas::iniciar_deteccion(handle);
             Ok(())

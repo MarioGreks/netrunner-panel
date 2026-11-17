@@ -317,9 +317,27 @@ export type EventoPanel =
   | "notas://estado"
   | "musica://estado"
   | "accesos://estado"
-  | "correo://estado";
+  | "correo://estado"
+  | "actualizador://progreso"
+  | "actualizador://instalando";
 
 export const alEvento = <T = unknown>(
   evento: EventoPanel,
   manejador: (carga: T) => void,
 ): Promise<UnlistenFn> => listen<T>(evento, (e) => manejador(e.payload));
+
+// --- Actualizador ---
+export interface InfoActualizacion {
+  version: string;
+  version_actual: string;
+  notas: string | null;
+  fecha: string | null;
+}
+export interface ProgresoActualizacion {
+  descargado: number;
+  total: number | null;
+}
+export const buscarActualizacion = () => invoke<InfoActualizacion | null>("buscar_actualizacion");
+export const infoActualizacion = () => invoke<InfoActualizacion | null>("info_actualizacion");
+export const instalarActualizacion = () => invoke<void>("instalar_actualizacion");
+export const posponerActualizacion = () => invoke<void>("posponer_actualizacion");

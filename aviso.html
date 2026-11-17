@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Netrunner Panel · actualización</title>
+  </head>
+  <body class="aviso-body">
+    <div class="aviso">
+      <div class="aviso__in">
+        <div class="aviso__cab">
+          <span class="aviso__sys">SYS // UPDATE</span>
+          <span class="aviso__led"></span>
+        </div>
+        <h1 class="aviso__titulo">ACTUALIZACIÓN DISPONIBLE</h1>
+        <div class="aviso__versiones" id="versiones">v— → v—</div>
+        <div class="aviso__notas" id="notas"></div>
+        <div class="aviso__progreso" id="progreso" hidden>
+          <div class="aviso__barra" id="barra"></div>
+          <span class="aviso__pct" id="pct">DESCARGANDO…</span>
+        </div>
+        <div class="aviso__error" id="error" hidden></div>
+        <div class="aviso__botones">
+          <button class="aviso__btn aviso__btn--primario" id="actualizar" type="button">ACTUALIZAR</button>
+          <button class="aviso__btn" id="luego" type="button">LUEGO</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/aviso.ts"></script>
+  </body>
+</html>

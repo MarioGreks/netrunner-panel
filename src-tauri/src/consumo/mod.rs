@@ -19,8 +19,10 @@ pub mod disco;
 pub mod equipos;
 pub mod limites;
 pub mod plugin;
+pub mod ventana;
 pub mod reparto;
 pub mod rutas;
+pub mod serie;
 pub mod transcripciones;
 pub mod vigilancia;
 #[cfg(test)]
@@ -334,8 +336,8 @@ pub struct Detalle {
     ultimo: Mutex<Option<Vec<SesionContexto>>>,
     /// id de sesión -> id del chat de la app de Claude, de las sesiones del último cálculo.
     chats: Mutex<std::collections::HashMap<String, String>>,
-    /// La pestaña CONSUMO o la ventana flotante se ven.
-    visible: AtomicBool,
+    /// Qué vistas se ven ahora (la pestaña CONSUMO y/o la ventana flotante).
+    visibles: Mutex<Origenes>,
     /// Para despertar al hilo de contexto al instante cuando cambia `visible`.
     aviso_ctx: (Mutex<()>, Condvar),
     /// Petición de lectura anticipada al hilo del lector.
@@ -350,7 +352,38 @@ fn bloquear<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
+/// Vistas que están a la vista. El hilo de contexto trabaja si hay alguna: así la pestaña y la
+/// ventana no se apagan una a la otra.
+#[derive(Debug, Default)]
+pub struct Origenes(std::collections::HashSet<&'static str>);
+
+/// Orígenes válidos de `vista_consumo`.
+pub const ORIGENES: [&str; 2] = ["pestana", "ventana"];
+
+impl Origenes {
+    /// Marca un origen como visible o no. Falso si el origen no es de los conocidos.
+    pub fn fijar(&mut self, origen: &str, visible: bool) -> bool {
+        let Some(o) = ORIGENES.iter().find(|o| **o == origen) else {
+            return false;
+        };
+        if visible {
+            self.0.insert(o);
+        } else {
+            self.0.remove(o);
+        }
+        true
+    }
+
+    pub fn alguno(&self) -> bool {
+        !self.0.is_empty()
+    }
+}
+
 impl Detalle {
+    fn hay_vista(&self) -> bool {
+        bloquear(&self.visibles).alguno()
+    }
+
     fn nuevo() -> Detalle {
         Detalle::con_lector(Lector::new(raiz_proyectos()))
     }
@@ -361,7 +394,7 @@ impl Detalle {
             contexto: Mutex::new(Contexto::real()),
             ultimo: Mutex::new(None),
             chats: Mutex::new(Default::default()),
-            visible: AtomicBool::new(false),
+            visibles: Mutex::new(Origenes::default()),
             aviso_ctx: (Mutex::new(()), Condvar::new()),
             pedir_lectura: (Mutex::new(false), Condvar::new()),
             leyendo: AtomicBool::new(false),
@@ -389,23 +422,42 @@ pub fn abrir_chat_consumo(id: String, detalle: State<'_, Detalle>) -> Result<(),
     crate::accesos::abrir_shell(format!("claude://claude.ai/epitaxy/{chat}"))
 }
 
-/// La interfaz avisa de que la pestaña CONSUMO o la ventana flotante se ven (o dejan de verse):
-/// solo mientras se ven corre el hilo de contexto.
+/// La interfaz avisa de que una vista de CONSUMO (`origen`: "pestana" o "ventana") se ve o deja de
+/// verse: el hilo de contexto corre mientras alguna se vea.
 #[tauri::command]
-pub fn vista_consumo(visible: bool, detalle: State<'_, Detalle>) {
-    {
+pub fn vista_consumo(origen: String, visible: bool, detalle: State<'_, Detalle>) -> Result<(), String> {
+    fijar_vista(&detalle, &origen, visible)
+}
+
+pub(crate) fn fijar_vista(detalle: &Detalle, origen: &str, visible: bool) -> Result<(), String> {
+    let alguna = {
         let _g = bloquear(&detalle.aviso_ctx.0);
-        detalle.visible.store(visible, Ordering::SeqCst);
+        if !bloquear(&detalle.visibles).fijar(origen, visible) {
+            return Err(format!("Origen de vista no válido: {origen}"));
+        }
+        let alguna = detalle.hay_vista();
         detalle.aviso_ctx.1.notify_all();
-    }
-    if !visible || detalle.leyendo.load(Ordering::SeqCst) {
-        return;
+        alguna
+    };
+    if !visible || !alguna || detalle.leyendo.load(Ordering::SeqCst) {
+        return Ok(());
     }
     let vieja = bloquear(&detalle.ultima_lectura).is_none_or(|t| t.elapsed() > LECTURA_VIEJA);
     if vieja {
         *bloquear(&detalle.pedir_lectura.0) = true;
         detalle.pedir_lectura.1.notify_all();
     }
+    Ok(())
+}
+
+/// Serie del historial de la semana (y de las 5 h) para la gráfica de ritmo. Del historial
+/// fusionado que ya está en memoria: no lee ficheros.
+#[tauri::command]
+pub fn serie_consumo(consumo: State<'_, Consumo>) -> serie::SerieConsumo {
+    let g = consumo.interno.lock().unwrap_or_else(|e| e.into_inner());
+    let ahora = ahora_s();
+    let uso = renovar_ventanas(&g.uso, ahora);
+    serie::calcular_serie(uso.semanal.as_ref(), uso.cinco_horas.as_ref(), &g.todas, &g.todas5, ahora)
 }
 
 /// Recalcula el contexto, lo guarda y, si cambió (o `siempre`), avisa a la interfaz.
@@ -437,12 +489,12 @@ fn hilo_contexto(app: &AppHandle) {
         let mut siempre = false;
         {
             let g = bloquear(&d.aviso_ctx.0);
-            if !d.visible.load(Ordering::SeqCst) {
+            if !d.hay_vista() {
                 siempre = true; // al volver a verse, la interfaz recibe el estado aunque no haya cambiado
                 let _g = d
                     .aviso_ctx
                     .1
-                    .wait_while(g, |_| !d.visible.load(Ordering::SeqCst))
+                    .wait_while(g, |_| !d.hay_vista())
                     .unwrap_or_else(|e| e.into_inner());
             }
         }
@@ -453,7 +505,7 @@ fn hilo_contexto(app: &AppHandle) {
         let _ = d
             .aviso_ctx
             .1
-            .wait_timeout_while(g, CADA_CONTEXTO, |_| d.visible.load(Ordering::SeqCst));
+            .wait_timeout_while(g, CADA_CONTEXTO, |_| d.hay_vista());
     }
 }
 

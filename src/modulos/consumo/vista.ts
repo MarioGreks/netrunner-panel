@@ -5,7 +5,6 @@
 // Mientras no lo está no hay temporizadores ni animaciones, y el hilo de contexto del núcleo
 // se para (vistaConsumo(false)). Los oyentes de eventos solo guardan el dato; pintan si hay vista.
 import {
-  abrirChatConsumo,
   abrirVentanaConsumo,
   alContextoConsumo,
   alDatosConsumo,
@@ -20,56 +19,21 @@ import {
   type DatosDisco,
   type DiagnosticoConsumo,
   type EstadoConsumo,
-  type NivelConsumo,
-  type NivelContexto,
   type SesionContexto,
-  type VentanaConsumo,
 } from "../../lib/ipc";
 import { abrirAjustes } from "../../lib/navegacion";
 import { alCambiarVisibilidadPanel, panelVisible } from "../../lib/visibilidad";
-import { crearAnillo, type Anillo } from "../../ui/grafica";
+import {
+  crearBloqueLimite,
+  crearListaContexto,
+  pintarCuentaAtras,
+  pintarLimite,
+  plantillaLimite,
+  ventanasDe,
+} from "./piezas";
 
-/** La ventana flotante aún no existe (encargo 6): el botón ABRIR queda oculto hasta entonces. */
-const VENTANA_DISPONIBLE = false;
 const MAX_SESIONES = 10;
 const REFRESCO_MIN_MS = 30_000; // mínimo entre relecturas del estado al llegar el reset
-
-const COLOR_NIVEL: Record<NivelConsumo, string> = {
-  bien: "var(--cian)",
-  encima: "var(--amarillo)",
-  riesgo: "var(--rojo)",
-};
-
-/** Mismo formato que `falta` del núcleo: «1d 1h», «1h 01m», «10m». */
-function formatearFalta(s: number): string {
-  const t = Math.max(0, Math.floor(s));
-  const d = Math.floor(t / 86400);
-  const h = Math.floor((t % 86400) / 3600);
-  const m = Math.floor((t % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
-  return `${m}m`;
-}
-
-const tokensCorto = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}K` : String(n));
-
-interface BloqueLimite {
-  anillo: Anillo;
-  ritmo: HTMLElement;
-  semana: HTMLElement;
-  exceso: HTMLElement;
-  falta: HTMLElement;
-}
-
-const plantillaLimite = (clave: string, titulo: string) => `
-  <div class="con__limite" data-id="${clave}">
-    <span class="con__sub">${titulo}</span>
-    <div class="con__anillo" data-id="${clave}-anillo"></div>
-    <span class="con__exceso" data-id="${clave}-exceso" hidden></span>
-    <span class="con__ritmo" data-id="${clave}-ritmo"></span>
-    <span class="con__semana" data-id="${clave}-semana"></span>
-    <span class="con__falta">RESET <b data-id="${clave}-falta">--</b></span>
-  </div>`;
 
 export function montar(contenedor: HTMLElement): () => void {
   contenedor.innerHTML = `
@@ -99,7 +63,7 @@ export function montar(contenedor: HTMLElement): () => void {
         <div class="banda"></div>
       </div>
       <div class="con__pie">
-        <button class="fm__btn" data-id="abrir" hidden>ABRIR</button>
+        <button class="fm__btn" data-id="abrir">ABRIR</button>
         <span class="con__datos" data-id="datos"></span>
       </div>
     </div>`;
@@ -107,19 +71,8 @@ export function montar(contenedor: HTMLElement): () => void {
   const q = <T extends HTMLElement>(id: string) => contenedor.querySelector<T>(`[data-id="${id}"]`)!;
   const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-  const crearBloque = (clave: string, tamano: number, segmentos: number): BloqueLimite => {
-    const anillo = crearAnillo(q(`${clave}-anillo`), { color: "var(--cian)", tamano, segmentos });
-    anillo.fijar(null, true);
-    return {
-      anillo,
-      ritmo: q(`${clave}-ritmo`),
-      semana: q(`${clave}-semana`),
-      exceso: q(`${clave}-exceso`),
-      falta: q(`${clave}-falta`),
-    };
-  };
-  const bloqueSem = crearBloque("sem", 132, 48);
-  const bloqueCinco = crearBloque("cinco", 96, 32);
+  const bloqueSem = crearBloqueLimite(contenedor, "sem", 132, 48);
+  const bloqueCinco = crearBloqueLimite(contenedor, "cinco", 96, 32);
 
   const avisoEl = q("aviso");
   const avisoTexto = q("aviso-texto");
@@ -130,12 +83,10 @@ export function montar(contenedor: HTMLElement): () => void {
   const datosEl = q("datos");
   const sesionesEl = q("sesiones");
   const sinSesiones = q("sin-sesiones");
-  const cuentaCtx = q("ctx-cuenta");
+  const listaCtx = crearListaContexto(sesionesEl, sinSesiones, q("ctx-cuenta"), MAX_SESIONES);
 
-  if (VENTANA_DISPONIBLE) {
-    botonAbrir.hidden = false;
-    botonAbrir.addEventListener("click", () => void abrirVentanaConsumo().catch(() => {}));
-  }
+  botonAbrir.hidden = false;
+  botonAbrir.addEventListener("click", () => void abrirVentanaConsumo().catch(() => {}));
 
   // --- Estado ---
   let montada = true;
@@ -151,49 +102,20 @@ export function montar(contenedor: HTMLElement): () => void {
   let entrada = false; // la próxima pintura de anillos arranca desde 0 (animación de entrada)
 
   // --- Límites ---
-  const pintarVentana = (b: BloqueLimite, v: VentanaConsumo, animar: boolean) => {
-    const color = COLOR_NIVEL[v.nivel];
-    const sinDato = !v.hayDatos;
-    b.anillo.colorAnillo(color);
-    b.anillo.colorValor(color);
-    if (animar) b.anillo.fijar(0, true);
-    b.anillo.fijar(sinDato ? null : v.pct, movimientoReducido.matches);
-    b.anillo.marca(sinDato ? null : v.esperado);
-    b.anillo.tramo(sinDato || v.fin === null ? null : v.fin);
-    b.ritmo.textContent = sinDato ? "SIN DATOS" : (v.textoRitmo ?? "");
-    b.ritmo.classList.toggle("con__ritmo--encima", v.nivel === "encima");
-    b.ritmo.classList.toggle("con__ritmo--riesgo", v.nivel === "riesgo");
-    b.semana.textContent = sinDato ? "" : (v.textoSemana ?? v.textoSinLimite ?? "");
-    b.exceso.hidden = sinDato || v.exceso <= 0;
-    if (!b.exceso.hidden) b.exceso.textContent = `▲ EXCESO +${Math.round(v.exceso)}%`;
-    b.falta.textContent = v.textoFalta;
-  };
-
   const pintarEstado = () => {
     if (!estado) return;
     // Con prefers-reduced-motion los anillos se colocan directamente, sin entrada
     const animar = entrada && !movimientoReducido.matches;
     entrada = false;
-    pintarVentana(bloqueSem, estado.semanal, animar);
-    pintarVentana(bloqueCinco, estado.cincoHoras, animar);
+    pintarLimite(bloqueSem, estado.semanal, animar, movimientoReducido.matches);
+    pintarLimite(bloqueCinco, estado.cincoHoras, animar, movimientoReducido.matches);
     pintarAviso();
   };
 
   // Reloj: solo cambia el textContent de la cuenta atrás (1 s, solo con la vista visible)
   const pintarReloj = () => {
     if (!estado) return;
-    const pasado = (Date.now() - recibidoEn) / 1000;
-    let vencido = false;
-    for (const [b, v] of [
-      [bloqueSem, estado.semanal],
-      [bloqueCinco, estado.cincoHoras],
-    ] as const) {
-      if (v.segundosHastaReset === null) continue;
-      const falta = v.segundosHastaReset - pasado;
-      if (falta <= 0) vencido = true;
-      const t = formatearFalta(falta);
-      if (b.falta.textContent !== t) b.falta.textContent = t;
-    }
+    const vencido = pintarCuentaAtras(ventanasDe(estado, bloqueSem, bloqueCinco), (Date.now() - recibidoEn) / 1000);
     // Al llegar un reset, el estado cambia: se relee (como mucho cada 30 s)
     if (vencido && Date.now() - ultimoRefresco > REFRESCO_MIN_MS) refrescarEstado();
   };
@@ -214,60 +136,7 @@ export function montar(contenedor: HTMLElement): () => void {
   };
 
   // --- Contexto ---
-  interface Pastilla {
-    boton: HTMLButtonElement;
-    relleno: HTMLElement;
-    nombre: HTMLElement;
-    tokens: HTMLElement;
-  }
-  const pastillas = new Map<string, Pastilla>();
-  const clasesNivel: NivelContexto[] = ["bien", "medio", "alto"];
-
-  const pintarContexto = () => {
-    const lista = sesiones.slice(0, MAX_SESIONES);
-    cuentaCtx.textContent = String(lista.length);
-    sinSesiones.hidden = lista.length > 0;
-    sesionesEl.hidden = lista.length === 0;
-    const ids = lista.map((s) => s.id);
-    // Se quitan las que ya no están y se crean las nuevas; el resto se actualiza en sitio
-    for (const [id, p] of pastillas) {
-      if (!ids.includes(id)) {
-        p.boton.remove();
-        pastillas.delete(id);
-      }
-    }
-    lista.forEach((s, i) => {
-      let p = pastillas.get(s.id);
-      if (!p) {
-        const boton = document.createElement("button");
-        boton.className = "ctx";
-        boton.innerHTML = `
-          <span class="ctx__barra"><i class="ctx__relleno"></i></span>
-          <span class="ctx__nombre"></span>
-          <span class="ctx__tokens"></span>`;
-        const id = s.id;
-        boton.addEventListener("click", () => {
-          if (boton.classList.contains("ctx--chat")) void abrirChatConsumo(id).catch(() => {});
-        });
-        p = {
-          boton,
-          relleno: boton.querySelector<HTMLElement>(".ctx__relleno")!,
-          nombre: boton.querySelector<HTMLElement>(".ctx__nombre")!,
-          tokens: boton.querySelector<HTMLElement>(".ctx__tokens")!,
-        };
-        pastillas.set(s.id, p);
-      }
-      const pastilla = p;
-      if (sesionesEl.children[i] !== pastilla.boton) sesionesEl.insertBefore(pastilla.boton, sesionesEl.children[i] ?? null);
-      pastilla.relleno.style.height = `${Math.round(Math.min(1, Math.max(0, s.fraccion)) * 100)}%`;
-      clasesNivel.forEach((n) => pastilla.boton.classList.toggle(`ctx--${n}`, s.nivel === n));
-      pastilla.boton.classList.toggle("ctx--chat", s.tieneChat);
-      const titulo = `${s.nombre}\n${s.proyecto} · ${s.tokens.toLocaleString("es-ES")} tokens · ${Math.round(s.fraccion * 100)} %`;
-      if (pastilla.boton.title !== titulo) pastilla.boton.title = titulo;
-      if (pastilla.nombre.textContent !== s.nombre) pastilla.nombre.textContent = s.nombre;
-      pastilla.tokens.textContent = tokensCorto(s.tokens);
-    });
-  };
+  const pintarContexto = () => listaCtx.pintar(sesiones);
 
   const recibirContexto = (lista: SesionContexto[]) => {
     if (!montada) return;
@@ -328,7 +197,7 @@ export function montar(contenedor: HTMLElement): () => void {
   const aplicarVisible = (v: boolean) => {
     if (v === visible) return;
     visible = v;
-    void vistaConsumo(v).catch(() => {});
+    void vistaConsumo("pestana", v).catch(() => {});
     if (!v) {
       clearInterval(temporizador);
       temporizador = undefined;

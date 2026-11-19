@@ -14,6 +14,7 @@ export default defineConfig({
         tab: resolve(import.meta.dirname, "tab.html"),
         aviso: resolve(import.meta.dirname, "aviso.html"),
         avisoConsumo: resolve(import.meta.dirname, "aviso-consumo.html"),
+        consumo: resolve(import.meta.dirname, "consumo.html"),
       },
     },
   },

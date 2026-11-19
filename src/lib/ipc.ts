@@ -329,6 +329,7 @@ export type EventoPanel =
   | "consumo://datos"
   | "consumo://ajustes"
   | "consumo://aviso"
+  | "consumo://ventana"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"
@@ -403,11 +404,32 @@ export interface SesionContexto {
 export const contextoConsumo = () => invoke<SesionContexto[]>("contexto_consumo");
 /** Abre el chat de la sesión en la app de Claude. Falla si la sesión no tiene chat. */
 export const abrirChatConsumo = (id: string) => invoke<void>("abrir_chat_consumo", { id });
-/** Avisa de que la pestaña CONSUMO o la ventana flotante se ven (true) o se ocultan (false): solo con la vista a la vista se calcula el contexto. */
-export const vistaConsumo = (visible: boolean) => invoke<void>("vista_consumo", { visible });
+/** Vistas de CONSUMO que pueden estar a la vista: la pestaña del panel y la ventana flotante. */
+export type OrigenVistaConsumo = "pestana" | "ventana";
+/** Avisa de que una vista (`origen`) se ve (true) o se oculta (false): el contexto se calcula mientras alguna se vea. */
+export const vistaConsumo = (origen: OrigenVistaConsumo, visible: boolean) =>
+  invoke<void>("vista_consumo", { origen, visible });
 /** Se emite cada 5 s (si cambió algo) mientras la vista está a la vista. */
 export const alContextoConsumo = (cb: (sesiones: SesionContexto[]) => void) =>
   alEvento<SesionContexto[]>("consumo://contexto", cb);
+
+// --- Serie del historial (gráfica de ritmo) ---
+/** Muestras de una ventana de límite: `[t (s), %]`, solo donde el % sube. */
+export interface SerieVentanaConsumo {
+  inicio: number;
+  reset: number;
+  pct: number;
+  muestras: [number, number][];
+}
+export interface HistorialConsumo {
+  semanal: SerieVentanaConsumo | null;
+  cincoHoras: SerieVentanaConsumo | null;
+}
+/** Historial de la semana actual (y de las 5 h) del historial ya en memoria; no lee ficheros. */
+export const serieConsumo = () => invoke<HistorialConsumo>("serie_consumo");
+/** La ventana de Consumo se minimiza (false) o se restaura (true). Solo llega a esa ventana. */
+export const alVentanaConsumoVisible = (cb: (visible: boolean) => void) =>
+  alEvento<boolean>("consumo://ventana", cb);
 
 // --- Detalle del consumo: reparto del % semanal (todos los equipos) ---
 /** Nombre y % (un modelo, una tarea, una sesión...). Los nombres especiales: "(otros)" = no atribuido, "(resto)" = proyectos menores juntos, "(pequeñas)" = sesiones diminutas juntas. */
@@ -516,7 +538,7 @@ export const datosConsumo = () => invoke<DatosDisco>("datos_consumo");
 /** Se emite una vez por arranque al pasar del máximo de GB. */
 export const alDatosConsumo = (cb: (d: DatosDisco) => void) => alEvento<DatosDisco>("consumo://datos", cb);
 
-/** Ventana flotante con la información completa de Consumo (encargo 6): el comando aún no existe en Rust. */
+/** Abre la ventana flotante con la información completa de Consumo (si ya está abierta, la trae al frente). */
 export const abrirVentanaConsumo = () => invoke<void>("abrir_ventana_consumo");
 
 // --- Actualizador ---

@@ -51,6 +51,8 @@ pub fn run() {
             consumo::contexto_consumo,
             consumo::abrir_chat_consumo,
             consumo::vista_consumo,
+            consumo::serie_consumo,
+            consumo::ventana::abrir_ventana_consumo,
             consumo::detalle_consumo,
             consumo::vigilancia::diagnostico_consumo,
             consumo::vigilancia::instalar_plugin_consumo,

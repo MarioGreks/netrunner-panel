@@ -258,3 +258,23 @@ fn estado_completo() {
     assert_eq!(j["semanal"]["nivel"].as_str().map(|s| s.is_empty()), Some(false));
     assert!(j["semanal"].get("segundosHastaReset").is_some());
 }
+
+#[test]
+fn origenes_de_vista_se_suman_sin_apagarse_entre_si() {
+    use super::Origenes;
+    let mut o = Origenes::default();
+    assert!(!o.alguno());
+    assert!(o.fijar("pestana", true));
+    assert!(o.fijar("ventana", true));
+    // Una se oculta: la otra mantiene el trabajo
+    assert!(o.fijar("pestana", false));
+    assert!(o.alguno());
+    assert!(o.fijar("ventana", false));
+    assert!(!o.alguno());
+    // Repetir no acumula y un origen desconocido se rechaza
+    assert!(o.fijar("pestana", true) && o.fijar("pestana", true));
+    assert!(o.fijar("pestana", false));
+    assert!(!o.alguno());
+    assert!(!o.fijar("otra", true));
+    assert!(!o.alguno());
+}

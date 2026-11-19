@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Listener, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const ESPERA_INICIAL: Duration = Duration::from_secs(10);
@@ -145,6 +146,32 @@ pub async fn buscar_actualizacion(app: AppHandle) -> Result<Option<InfoActualiza
     }))
 }
 
+/// Texto del diálogo cuando una comprobación manual no encuentra nada.
+fn texto_al_dia(version: &str) -> String {
+    format!("Netrunner Panel está actualizado (versión {version}).")
+}
+
+/// «Buscar actualizaciones» del menú de la bandeja: si hay versión nueva abre la ventana de
+/// aviso (aunque estuviera pospuesta); si no, o si falla, lo cuenta en un diálogo.
+pub fn buscar_desde_bandeja(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let (texto, tipo) = match comprobar(&app).await {
+            Ok(Some(_)) => {
+                abrir_aviso(&app);
+                return;
+            }
+            Ok(None) => (texto_al_dia(&app.package_info().version.to_string()), MessageDialogKind::Info),
+            Err(e) => (e, MessageDialogKind::Error),
+        };
+        app.dialog()
+            .message(texto)
+            .title("Netrunner Panel · actualizaciones")
+            .kind(tipo)
+            .show(|_| {});
+    });
+}
+
 /// La ventana de aviso pide aquí la actualización pendiente al cargar.
 #[tauri::command]
 pub fn info_actualizacion(estado: State<'_, EstadoActualizador>) -> Option<InfoActualizacion> {
@@ -188,5 +215,15 @@ pub fn posponer_actualizacion(app: AppHandle, estado: State<'_, EstadoActualizad
     }
     if let Some(v) = app.get_webview_window(ETIQUETA) {
         let _ = v.close();
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn mensaje_de_al_dia_con_la_version() {
+        assert_eq!(texto_al_dia("1.6.1"), "Netrunner Panel está actualizado (versión 1.6.1).");
     }
 }

@@ -4,7 +4,7 @@
 //! físicos, y las medidas lógicas del diseño (420 px, 8×140, 760×480) se multiplican
 //! por el factor de escala del monitor principal.
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -35,6 +35,19 @@ const ESPERA_CIERRE: Duration = Duration::from_millis(120);
 const REARME_CIERRE: Duration = Duration::from_millis(600);
 
 type Rect = (PhysicalPosition<i32>, PhysicalSize<u32>);
+
+/// «Ocultar Netrunner Panel» (menú de la bandeja): sin miniventana ni apertura por borde, pero
+/// con la app y el icono de la bandeja en marcha. No se guarda: al reiniciar vuelve a verse.
+static OCULTO: AtomicBool = AtomicBool::new(false);
+
+pub fn esta_oculto() -> bool {
+    OCULTO.load(Ordering::SeqCst)
+}
+
+/// ¿Debe verse la miniventana del borde?
+fn mini_permitida(pantalla_completa: bool, oculto: bool) -> bool {
+    !pantalla_completa && !oculto
+}
 
 /// Geometría física de ambas ventanas y del monitor: (panel, pestaña, monitor completo).
 struct Geometria {
@@ -156,6 +169,10 @@ pub fn ir_a_evento(app: AppHandle, id: String) {
 /// ocultarla o cambiarle el tamaño, WebView2 puede pintar de negro lo que queda fuera de
 /// las esquinas cortadas.
 fn mostrar_mini(app: &AppHandle) {
+    let pantalla_completa = app.state::<Estado>().pantalla_completa.load(Ordering::SeqCst);
+    if !mini_permitida(pantalla_completa, esta_oculto()) {
+        return;
+    }
     if let Some(t) = app.get_webview_window("tab") {
         let _ = t.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
         let _ = t.show();
@@ -197,7 +214,29 @@ fn fijar_pantalla_completa(app: &AppHandle, valor: bool) {
     let _ = app.emit("pantalla_completa://cambio", valor);
 }
 
+/// Oculta (o vuelve a mostrar) la app sin cerrarla: la miniventana y la apertura por borde
+/// quedan apagadas y el panel, si estaba abierto, se cierra con su animación.
+pub fn fijar_oculto(app: &AppHandle, valor: bool) {
+    if OCULTO.swap(valor, Ordering::SeqCst) == valor {
+        return;
+    }
+    if valor {
+        if let Some(t) = app.get_webview_window("tab") {
+            let _ = t.hide();
+        }
+        pedir_ocultar(app);
+    } else if !app.state::<Estado>().panel_visible.load(Ordering::SeqCst) {
+        reposicionar(app);
+        mostrar_mini(app);
+    }
+    crate::bandeja::actualizar_oculto(app);
+}
+
 pub fn mostrar_panel(app: &AppHandle) {
+    // Abrir el panel a propósito (bandeja, acceso directo, segunda instancia) desoculta la app
+    if OCULTO.swap(false, Ordering::SeqCst) {
+        crate::bandeja::actualizar_oculto(app);
+    }
     let estado = app.state::<Estado>();
     if estado.panel_visible.swap(true, Ordering::SeqCst) {
         // Ya visible: solo devolverle el foco (p. ej. segunda instancia)
@@ -342,6 +381,7 @@ pub fn iniciar_deteccion(app: AppHandle) {
             // Con la apertura por borde en pausa no se abre (el cierre sigue funcionando)
             if estado.panel_visible.load(Ordering::SeqCst) || !armado
                 || pausado
+                || esta_oculto()
                 || estado.pantalla_completa.load(Ordering::SeqCst)
             {
                 desde = None;
@@ -357,3 +397,16 @@ pub fn iniciar_deteccion(app: AppHandle) {
     });
 }
 
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn la_miniventana_solo_se_ve_sin_pantalla_completa_ni_ocultar() {
+        assert!(mini_permitida(false, false));
+        assert!(!mini_permitida(true, false));
+        assert!(!mini_permitida(false, true));
+        assert!(!mini_permitida(true, true));
+    }
+}

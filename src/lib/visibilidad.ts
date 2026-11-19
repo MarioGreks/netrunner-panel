@@ -1,6 +1,8 @@
 // ¿Se está viendo el panel? Lo fija main.ts con los eventos panel://mostrar y panel://ocultar.
 // Los módulos que trabajan en segundo plano (p. ej. CONSUMO) lo usan para parar todo mientras está oculto.
-let visible = typeof document !== "undefined" ? document.visibilityState === "visible" : true;
+// Empieza oculto: el panel arranca escondido y siempre llega un panel://mostrar al enseñarse
+// (también al abrirlo a mano). Así nada trabaja por un visibilityState engañoso de WebView2.
+let visible = false;
 const oyentes = new Set<(visible: boolean) => void>();
 
 export const panelVisible = () => visible;

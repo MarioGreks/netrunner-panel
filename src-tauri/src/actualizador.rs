@@ -1,23 +1,28 @@
 //! Actualizador automático con `tauri-plugin-updater` contra GitHub Releases.
 //!
-//! Comprueba a los 10 s de arrancar y cada 6 h. Si hay una versión nueva abre la
-//! ventana HUD «aviso» (aviso.html). Estado propio: no toca `estado.rs`.
+//! Comprueba a los 10 s de arrancar, cada hora y al mostrar el panel (si la última
+//! comprobación tiene más de 10 min). Si hay una versión nueva abre la ventana HUD
+//! «aviso» (aviso.html). Estado propio: no toca `estado.rs`.
 
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Listener, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const ESPERA_INICIAL: Duration = Duration::from_secs(10);
-const INTERVALO: Duration = Duration::from_secs(6 * 60 * 60);
+const INTERVALO: Duration = Duration::from_secs(60 * 60);
+/// Al mostrar el panel solo se vuelve a comprobar si la última comprobación es más vieja.
+const EDAD_MAX_AL_MOSTRAR: Duration = Duration::from_secs(10 * 60);
 const ETIQUETA: &str = "aviso";
 
 #[derive(Default)]
 pub struct EstadoActualizador {
     pendiente: Mutex<Option<Update>>,
     pospuesta: Mutex<Option<String>>,
+    ultima_comprobacion: Mutex<Option<Instant>>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -46,6 +51,7 @@ fn info(u: &Update) -> InfoActualizacion {
 
 /// Busca una actualización y guarda la encontrada como pendiente.
 async fn comprobar(app: &AppHandle) -> Result<Option<Update>, String> {
+    *app.state::<EstadoActualizador>().ultima_comprobacion.lock().unwrap() = Some(Instant::now());
     let actualizador = app
         .updater()
         .map_err(|e| format!("No se pudo preparar la comprobación: {e}"))?;
@@ -84,24 +90,43 @@ fn abrir_aviso(app: &AppHandle) {
     }
 }
 
+/// Comprobación en segundo plano: si hay versión nueva y no está pospuesta, abre el aviso.
+async fn revisar(app: &AppHandle) {
+    match comprobar(app).await {
+        Ok(Some(u)) => {
+            let pospuesta = app.state::<EstadoActualizador>().pospuesta.lock().unwrap().clone();
+            if pospuesta.as_deref() != Some(u.version.as_str()) {
+                abrir_aviso(app);
+            }
+        }
+        Ok(None) => {}
+        // En segundo plano los fallos (sin red, sin latest.json…) no molestan
+        Err(e) => eprintln!("actualizador: {e}"),
+    }
+}
+
 pub fn iniciar(app: &AppHandle) {
     app.manage(EstadoActualizador::default());
-    let app = app.clone();
+    let h = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio_sleep(ESPERA_INICIAL).await;
         loop {
-            match comprobar(&app).await {
-                Ok(Some(u)) => {
-                    let pospuesta = app.state::<EstadoActualizador>().pospuesta.lock().unwrap().clone();
-                    if pospuesta.as_deref() != Some(u.version.as_str()) {
-                        abrir_aviso(&app);
-                    }
-                }
-                Ok(None) => {}
-                // En segundo plano los fallos (sin red, sin latest.json…) no molestan
-                Err(e) => eprintln!("actualizador: {e}"),
-            }
+            revisar(&h).await;
             tokio_sleep(INTERVALO).await;
+        }
+    });
+    // Al mostrar el panel se vuelve a comprobar si hace más de 10 min de la última vez
+    let h = app.clone();
+    app.listen("panel://mostrar", move |_| {
+        let vieja = h
+            .state::<EstadoActualizador>()
+            .ultima_comprobacion
+            .lock()
+            .unwrap()
+            .map_or(false, |t| t.elapsed() > EDAD_MAX_AL_MOSTRAR);
+        if vieja {
+            let h = h.clone();
+            tauri::async_runtime::spawn(async move { revisar(&h).await });
         }
     });
 }
@@ -119,6 +144,32 @@ pub async fn buscar_actualizacion(app: AppHandle) -> Result<Option<InfoActualiza
         abrir_aviso(&app);
         info(&u)
     }))
+}
+
+/// Texto del diálogo cuando una comprobación manual no encuentra nada.
+fn texto_al_dia(version: &str) -> String {
+    format!("Netrunner Panel está actualizado (versión {version}).")
+}
+
+/// «Buscar actualizaciones» del menú de la bandeja: si hay versión nueva abre la ventana de
+/// aviso (aunque estuviera pospuesta); si no, o si falla, lo cuenta en un diálogo.
+pub fn buscar_desde_bandeja(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let (texto, tipo) = match comprobar(&app).await {
+            Ok(Some(_)) => {
+                abrir_aviso(&app);
+                return;
+            }
+            Ok(None) => (texto_al_dia(&app.package_info().version.to_string()), MessageDialogKind::Info),
+            Err(e) => (e, MessageDialogKind::Error),
+        };
+        app.dialog()
+            .message(texto)
+            .title("Netrunner Panel · actualizaciones")
+            .kind(tipo)
+            .show(|_| {});
+    });
 }
 
 /// La ventana de aviso pide aquí la actualización pendiente al cargar.
@@ -164,5 +215,15 @@ pub fn posponer_actualizacion(app: AppHandle, estado: State<'_, EstadoActualizad
     }
     if let Some(v) = app.get_webview_window(ETIQUETA) {
         let _ = v.close();
+    }
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+
+    #[test]
+    fn mensaje_de_al_dia_con_la_version() {
+        assert_eq!(texto_al_dia("1.6.1"), "Netrunner Panel está actualizado (versión 1.6.1).");
     }
 }

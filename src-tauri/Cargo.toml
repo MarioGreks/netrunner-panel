@@ -1,6 +1,6 @@
 [package]
 name = "netrunner-panel"
-version = "1.6.0"
+version = "1.7.0"
 description = "Panel de escritorio estilo cyberpunk HUD"
 edition = "2021"
 
@@ -26,10 +26,10 @@ windows = { version = "0.62.2", features = [
     "Win32_System_Ole",
     "Win32_System_Variant",
     "Win32_System_Registry",
-    "Win32_Storage_FileSystem",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
     "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
     "Media_Control",
     "Foundation",
     "Foundation_Collections",

@@ -14,6 +14,7 @@ mod musica;
 mod notas;
 mod outlook;
 mod pantalla_completa;
+mod pendientes;
 mod sistema;
 mod sync;
 mod ventanas;
@@ -104,6 +105,7 @@ pub fn run() {
             outlook::abrir_outlook,
             outlook::categorias_outlook,
             outlook::crear_evento,
+            outlook::borrar_evento,
             actualizador::buscar_actualizacion,
             actualizador::info_actualizacion,
             actualizador::instalar_actualizacion,
@@ -121,6 +123,7 @@ pub fn run() {
             interfaz::iniciar(&handle);
             ajustes::iniciar(&handle);
             microsoft::iniciar(&handle);
+            pendientes::iniciar(&handle);
             calendario::iniciar(&handle);
             consumo::iniciar(&handle);
             meteo::iniciar(&handle);

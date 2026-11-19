@@ -46,14 +46,26 @@ pub struct Evento {
     /// Primeras ~200 letras de DESCRIPTION, sin escapes.
     #[serde(default)]
     pub descripcion: Option<String>,
+    /// Ocurrencia de una serie (RRULE) o excepción de una serie. No se puede borrar desde
+    /// el panel: borrar una ocurrencia o toda la serie es una decisión que se toma en Outlook.
+    #[serde(default)]
+    pub recurrente: bool,
+    /// Creado desde el panel y aún no publicado por el ICS: vive en la cola de `pendientes`.
+    #[serde(default)]
+    pub pendiente: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct EstadoCalendario {
+    /// Lo que se muestra: el ICS más lo que el usuario creó (y menos lo que borró) desde el
+    /// panel y Outlook aún no ha procesado.
     pub eventos: Vec<Evento>,
     pub ultima_sync: Option<DateTime<Utc>>,
     pub sincronizando: bool,
     pub error: Option<String>,
+    /// Creaciones y borrados que esperan a que Outlook esté abierto.
+    #[serde(default)]
+    pub pendientes: usize,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -65,6 +77,9 @@ struct Cache {
 pub struct Calendario {
     estado: Mutex<EstadoCalendario>,
     ultimo_intento: Mutex<Option<Instant>>,
+    /// Eventos tal como los dice el último ICS (sin la cola de pendientes). Orden de bloqueo:
+    /// siempre `estado` antes que `crudos`.
+    crudos: Mutex<Vec<Evento>>,
 }
 
 // ---------------------------------------------------------------------------
@@ -492,6 +507,8 @@ pub fn interpretar(ics: &str, ahora: DateTime<Utc>, local: Tz) -> Result<Vec<Eve
                 ubicacion: c.ubicacion.clone(),
                 categorias: c.categorias.clone(),
                 descripcion: c.descripcion.clone(),
+                recurrente: c.rrule.is_some() || c.recurrence_id.is_some(),
+                pendiente: false,
             });
         }
     }
@@ -605,6 +622,7 @@ pub fn sincronizar(app: &AppHandle) {
         }
         if url.is_none() {
             *est = EstadoCalendario::default();
+            cal.crudos.lock().unwrap().clear();
             drop(est);
             borrar_cache(app);
             emitir(app);
@@ -619,7 +637,7 @@ pub fn sincronizar(app: &AppHandle) {
         let url = url.unwrap();
         let resultado = descargar(&url)
             .and_then(|t| interpretar(&t, Utc::now(), zona_local()));
-        let mut nuevos: Option<Vec<Evento>> = None;
+        let mut crudos_nuevos: Option<Vec<Evento>> = None;
         {
             let cal = app.state::<Calendario>();
             let mut est = cal.estado.lock().unwrap();
@@ -627,26 +645,46 @@ pub fn sincronizar(app: &AppHandle) {
             match resultado {
                 Ok(eventos) => {
                     let ahora = Utc::now();
-                    nuevos = Some(eventos.clone());
-                    est.eventos = eventos.clone();
                     est.ultima_sync = Some(ahora);
                     est.error = None;
-                    guardar_cache(&app, &Cache { eventos, ultima_sync: ahora });
+                    guardar_cache(&app, &Cache { eventos: eventos.clone(), ultima_sync: ahora });
+                    *cal.crudos.lock().unwrap() = eventos.clone();
+                    crudos_nuevos = Some(eventos);
                 }
                 // Se conservan los eventos de la caché
                 Err(e) => est.error = Some(e),
             }
         }
-        emitir(&app);
+        // Las creaciones y borrados que el ICS ya refleja salen de la cola; después se
+        // recompone la agenda (ICS + cola) y se emite
+        if let Some(crudos) = &crudos_nuevos {
+            crate::pendientes::limpiar_con_ics(&app, crudos);
+        }
+        refrescar_vista(&app);
         // Las cuentas atrás se ponen al día con los eventos recién leídos
-        if let Some(eventos) = nuevos {
-            crate::cuentas::reconciliar(&app, &eventos);
+        if crudos_nuevos.is_some() {
+            let visibles = app.state::<Calendario>().estado.lock().unwrap().eventos.clone();
+            crate::cuentas::reconciliar(&app, &visibles);
         }
         // La URL cambió mientras se sincronizaba: se repite con la nueva
         if url_configurada(&app).as_deref() != Some(url.as_str()) {
             sincronizar(&app);
         }
     });
+}
+
+/// Recompone lo que se muestra (último ICS + cola de pendientes) y lo emite. Se llama tras cada
+/// sincronización y cada vez que cambia la cola.
+pub fn refrescar_vista(app: &AppHandle) {
+    let Some(cal) = app.try_state::<Calendario>() else { return };
+    let cola = crate::pendientes::instantanea(app);
+    {
+        let mut est = cal.estado.lock().unwrap();
+        let crudos = cal.crudos.lock().unwrap();
+        est.eventos = crate::pendientes::superponer(&crudos, &cola);
+        est.pendientes = crate::pendientes::sin_enviar(&cola);
+    }
+    emitir(app);
 }
 
 #[tauri::command]
@@ -661,15 +699,20 @@ pub fn sincronizar_calendario(app: AppHandle) {
 
 pub fn iniciar(app: &AppHandle) {
     let mut inicial = EstadoCalendario::default();
+    let mut crudos: Vec<Evento> = Vec::new();
     if url_configurada(app).is_some() {
         if let Some(c) = cargar_cache(app) {
-            inicial.eventos = c.eventos;
+            crudos = c.eventos;
             inicial.ultima_sync = Some(c.ultima_sync);
         }
     }
+    let cola = crate::pendientes::instantanea(app);
+    inicial.eventos = crate::pendientes::superponer(&crudos, &cola);
+    inicial.pendientes = crate::pendientes::sin_enviar(&cola);
     app.manage(Calendario {
         estado: Mutex::new(inicial),
         ultimo_intento: Mutex::new(None),
+        crudos: Mutex::new(crudos),
     });
 
     // Al mostrar el panel, sincroniza si la última tiene más de 30 s
@@ -907,6 +950,28 @@ BEGIN:VEVENT\r\nUID:l2\r\nSUMMARY:Lejos\r\nDTSTART:20270604T080000Z\r\nEND:VEVEN
         let ev = interpretar(&s, ahora(), MADRID).unwrap();
         assert_eq!(ev.len(), 183); // un evento por día de la ventana, ni uno más
         assert!(t.elapsed() < Espera::from_secs(5));
+    }
+
+    #[test]
+    fn recurrente_solo_en_series_y_excepciones() {
+        let s = ics(
+            "BEGIN:VEVENT\r\nUID:u1\r\nSUMMARY:Suelto\r\nDTSTART:20261117T080000Z\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:u2\r\nSUMMARY:Serie\r\nDTSTART:20261117T090000Z\r\nRRULE:FREQ=WEEKLY\r\nEND:VEVENT\r\n\
+BEGIN:VEVENT\r\nUID:u2\r\nSUMMARY:Serie movida\r\nRECURRENCE-ID:20261124T090000Z\r\nDTSTART:20261125T100000Z\r\nEND:VEVENT\r\n",
+        );
+        let ev = interpretar(&s, ahora(), MADRID).unwrap();
+        assert!(!ev.iter().find(|e| e.titulo == "Suelto").unwrap().recurrente);
+        assert!(ev.iter().filter(|e| e.titulo == "Serie").all(|e| e.recurrente));
+        assert!(ev.iter().find(|e| e.titulo == "Serie movida").unwrap().recurrente);
+        // Una caché guardada antes de existir el campo se lee como no recurrente
+        let json = serde_json::to_string(&ev[0]).unwrap().replace(",\"recurrente\":false", "").replace(",\"recurrente\":true", "");
+        assert!(!serde_json::from_str::<Evento>(&json).unwrap().recurrente);
+    }
+
+    #[test]
+    fn los_eventos_del_ics_nunca_son_pendientes() {
+        let s = ics("BEGIN:VEVENT\r\nUID:p1\r\nSUMMARY:Normal\r\nDTSTART:20261117T080000Z\r\nEND:VEVENT\r\n");
+        assert!(interpretar(&s, ahora(), MADRID).unwrap().iter().all(|e| !e.pendiente));
     }
 
     #[test]

@@ -269,6 +269,72 @@
   100% { transform: scale(1); }
 }
 
+/* Evento creado desde el panel que Outlook aún no ha confirmado */
+.tmp__marca--pendiente {
+  color: var(--amarillo);
+  background: transparent;
+  border: 1px solid var(--amarillo-tenue);
+  animation: tmp-pendiente 1.8s ease-in-out infinite;
+}
+@keyframes tmp-pendiente {
+  50% { opacity: 0.55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tmp__marca--pendiente { animation: none; }
+}
+
+/* Borrar evento: «✕» discreta hasta pasar el ratón; confirmación en línea en rojo de alerta */
+.tmp__borrar {
+  flex: none;
+  align-self: flex-start;
+  padding: 0 2px;
+  font-size: 13px;
+  line-height: 1.15;
+  background: none;
+  border: 0;
+  color: var(--texto-tenue);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+.tmp__evento:hover .tmp__borrar, .tmp__borrar:focus-visible { opacity: 0.7; }
+.tmp__borrar:hover { opacity: 1; color: var(--rojo); }
+.tmp__evento--confirma {
+  flex-wrap: wrap;
+  border-color: var(--alerta-tenue);
+  border-left-color: var(--rojo);
+  background: var(--alerta-suave);
+}
+.tmp__evento--confirma .tmp__borrar { display: none; }
+.tmp__confirma {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--esp-2);
+  padding-top: var(--esp-1);
+  border-top: 1px dashed var(--alerta-tenue);
+}
+.tmp__confirma-texto {
+  flex: 1 1 12em;
+  min-width: 0;
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.12em;
+  color: var(--rojo);
+  overflow-wrap: anywhere;
+}
+.tmp__confirma-texto small {
+  display: block;
+  margin-top: 2px;
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--texto-tenue);
+}
+.tmp__confirma .tmp__btn:disabled { opacity: 0.5; cursor: default; }
+
 .tmp__evento--destello { animation: tmp-destello 1.2s ease-out; }
 @keyframes tmp-destello {
   0%, 40% { background: var(--primario-suave); border-color: var(--primario); box-shadow: 0 0 10px var(--primario-tenue); }

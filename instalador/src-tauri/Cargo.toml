@@ -1,6 +1,6 @@
 [package]
 name = "netrunner-panel-setup"
-version = "1.5.0"
+version = "1.6.0"
 description = "Instalador HUD de Netrunner Panel"
 edition = "2021"
 

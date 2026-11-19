@@ -106,7 +106,7 @@ function backendSimulado(): Backend {
 
   return {
     async estado() {
-      return { modo, version_nueva: "1.5.0", version_instalada: instalada, opciones };
+      return { modo, version_nueva: "1.6.0", version_instalada: instalada, opciones };
     },
     async instalar(_op, alPaso, alProgreso) {
       const total = 4000;

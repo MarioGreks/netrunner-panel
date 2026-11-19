@@ -4,6 +4,7 @@ mod ajustes;
 mod bandeja;
 mod calendario;
 mod config;
+mod consumo;
 mod cuentas;
 mod estado;
 mod interfaz;
@@ -46,6 +47,7 @@ pub fn run() {
             sistema::muestra_sistema,
             calendario::estado_calendario,
             calendario::sincronizar_calendario,
+            consumo::estado_consumo,
             cuentas::estado_cuentas,
             cuentas::marcar_cuenta,
             cuentas::desmarcar_cuenta,
@@ -99,6 +101,7 @@ pub fn run() {
             ajustes::iniciar(&handle);
             microsoft::iniciar(&handle);
             calendario::iniciar(&handle);
+            consumo::iniciar(&handle);
             meteo::iniciar(&handle);
             notas::iniciar(&handle);
             musica::iniciar(&handle);

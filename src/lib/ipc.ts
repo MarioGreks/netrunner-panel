@@ -322,6 +322,7 @@ export type EventoPanel =
   | "tema://cambio"
   | "sistema://muestra"
   | "calendario://estado"
+  | "consumo://estado"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"
@@ -338,6 +339,43 @@ export const alEvento = <T = unknown>(
   evento: EventoPanel,
   manejador: (carga: T) => void,
 ): Promise<UnlistenFn> => listen<T>(evento, (e) => manejador(e.payload));
+
+// --- Consumo de Claude ---
+export type NivelConsumo = "bien" | "encima" | "riesgo";
+/** Una ventana de límite (semanal o de 5 h) ya calculada. */
+export interface VentanaConsumo {
+  hayDatos: boolean;
+  pct: number;
+  /** % esperado por el tiempo transcurrido. */
+  esperado: number;
+  /** % estimado al acabar el día (semanal) o la ventana (5 h). */
+  fin: number | null;
+  /** 0..1. */
+  riesgo: number;
+  nivel: NivelConsumo;
+  /** % estimado al acabar la semana (solo semanal). */
+  proyeccionSemana: number | null;
+  /** % por encima del 100 % a ese ritmo. */
+  exceso: number;
+  textoRitmo: string | null;
+  textoSemana: string | null;
+  textoSinLimite: string | null;
+  resetsAt: number | null;
+  segundosHastaReset: number | null;
+  textoFalta: string;
+}
+export interface EstadoConsumo {
+  /** Sin datos de Claude (fichero ausente, vacío o de hace más de 6 h). */
+  sinDatos: boolean;
+  /** Segundos desde la última escritura del plugin. */
+  antiguedad: number | null;
+  semanal: VentanaConsumo;
+  cincoHoras: VentanaConsumo;
+}
+export const estadoConsumo = () => invoke<EstadoConsumo>("estado_consumo");
+/** Se emite cuando cambia usage.json (no cada segundo: la cuenta atrás se recalcula con `estadoConsumo`). */
+export const alEstadoConsumo = (cb: (estado: EstadoConsumo) => void) =>
+  alEvento<EstadoConsumo>("consumo://estado", cb);
 
 // --- Actualizador ---
 export interface InfoActualizacion {

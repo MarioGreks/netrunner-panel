@@ -64,6 +64,25 @@ pub fn carpeta_documentos(home: &Path) -> PathBuf {
     }
 }
 
+/// La carpeta Descargas de Windows (`FOLDERID_Downloads`: puede estar redirigida a OneDrive); si no
+/// se encuentra, `~/Downloads`.
+pub fn carpeta_descargas(home: &Path) -> PathBuf {
+    use windows::Win32::System::Com::CoTaskMemFree;
+    use windows::Win32::UI::Shell::{FOLDERID_Downloads, SHGetKnownFolderPath, KF_FLAG_DEFAULT};
+    // SAFETY: SHGetKnownFolderPath devuelve una cadena propia que se libera con CoTaskMemFree.
+    let ruta = unsafe {
+        SHGetKnownFolderPath(&FOLDERID_Downloads, KF_FLAG_DEFAULT, None).ok().and_then(|p| {
+            let s = p.to_string().ok();
+            CoTaskMemFree(Some(p.0 as *const _));
+            s
+        })
+    };
+    match ruta {
+        Some(r) if Path::new(&r).is_dir() => PathBuf::from(r),
+        _ => home.join("Downloads"),
+    }
+}
+
 /// Dónde guardaría este PC la copia larga (ajuste `historico_pc`; vacío = Documentos\Consumo).
 #[allow(dead_code)] // ver `carpeta_documentos`
 pub fn carpeta_historico_pc(ajuste: &str, home: &Path) -> PathBuf {

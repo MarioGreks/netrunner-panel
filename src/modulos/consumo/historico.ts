@@ -9,6 +9,7 @@
 //   tramo bajo el ratón (mousemove, fundido en un único requestAnimationFrame por `crearLienzo`).
 // - La vista se guarda solo si cambia (y el núcleo solo escribe si cambia lo guardado).
 import {
+  generarHistoricoConsumo,
   guardarVistaHistorico,
   historicoConsumo,
   vistaHistorico,
@@ -376,6 +377,24 @@ export function montarHistorico(raiz: HTMLElement, e: Entorno): Apartado {
     grupoControl("MODO", "modo", MODOS),
     grupoControl("PASO", "paso", PASOS),
   );
+  const exportar = el("div", "hs__grupo hs__grupo--exportar");
+  exportar.appendChild(el("span", "hs__titulo", "INFORME"));
+  const botonExportar = el("button", "hs__accion", "EXPORTAR HTML");
+  botonExportar.type = "button";
+  botonExportar.title = "Genera el histórico del periodo elegido, lo guarda en Descargas y lo abre en el navegador";
+  exportar.appendChild(botonExportar);
+  fila.appendChild(exportar);
+  botonExportar.addEventListener("click", () => {
+    if (!vista || botonExportar.disabled) return;
+    botonExportar.disabled = true;
+    e.mensaje("GENERANDO HISTÓRICO…");
+    generarHistoricoConsumo({ periodo: vista.periodo, desde: vista.desde || undefined, hasta: vista.hasta || undefined })
+      .then((t) => e.mensaje(t))
+      .catch((err) => e.mensaje(typeof err === "string" ? err : "NO SE PUDO GENERAR EL HISTÓRICO"))
+      .finally(() => {
+        if (vivo) botonExportar.disabled = false;
+      });
+  });
   const cuerpoControles = el("div", "marco__cuerpo");
   cuerpoControles.appendChild(fila);
   const cabControles = el("div", "marco__cabecera");

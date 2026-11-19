@@ -22,6 +22,8 @@ pub mod disco;
 pub mod equipos;
 pub mod historico;
 pub mod historico_vista;
+pub mod informe;
+pub mod informe_svg;
 pub mod limites;
 pub mod plugin;
 pub mod ventana;
@@ -38,6 +40,8 @@ mod pruebas_archivo;
 mod pruebas_ajustes;
 #[cfg(test)]
 mod pruebas_detalle;
+#[cfg(test)]
+mod pruebas_informe;
 #[cfg(test)]
 mod pruebas_plugin;
 #[cfg(test)]
@@ -164,6 +168,11 @@ impl Consumo {
     pub(crate) fn carpetas_historial(&self) -> Vec<PathBuf> {
         let activas = bloquear(&self.equipos).activas();
         disco::carpetas_historial(&activas, &self.carpeta.clone().unwrap_or_default())
+    }
+
+    /// Suscripción en $/mes (ajuste `suscripcion`; por defecto 20): la usa el resumen.
+    pub(crate) fn suscripcion_usd(&self) -> f64 {
+        self.carpeta.as_ref().map_or(20.0, |d| ajustes::leer_suscripcion_usd(&d.join(ajustes::FICHERO_AJUSTES)))
     }
 
     /// Precio de la suscripción en €/mes (ajuste `suscripcion_eur`; por defecto 18).
@@ -555,7 +564,7 @@ fn hilo_lector(app: &AppHandle) {
         d.leyendo.store(true, Ordering::SeqCst);
         let c = app.state::<Consumo>();
         let calculado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            ciclo_detalle_con(&c, &d, ahora_s(), || !consumo_en_marcha())
+            ciclo_detalle_con(&c, &d, ahora_s(), false, || !consumo_en_marcha())
         }));
         let mut archivado = false;
         if let Ok(Some((det, arch))) = calculado {
@@ -586,13 +595,14 @@ fn ciclo_detalle(
     ahora: f64,
     permitido: impl FnMut() -> bool,
 ) -> Option<DetalleConsumo> {
-    ciclo_detalle_con(c, d, ahora, permitido).map(|x| x.0)
+    ciclo_detalle_con(c, d, ahora, false, permitido).map(|x| x.0)
 }
 
 fn ciclo_detalle_con(
     c: &Consumo,
     d: &Detalle,
     ahora: f64,
+    forzar: bool,
     mut permitido: impl FnMut() -> bool,
 ) -> Option<(DetalleConsumo, ResultadoArchivo)> {
     let mut permiso: Option<bool> = None;
@@ -632,7 +642,7 @@ fn ciclo_detalle_con(
             &entrada,
             &carpetas,
             ahora,
-            false,
+            forzar,
             || {
                 let mut l = bloquear(&d.lector);
                 Medidas { costes: l.costes(), cache: l.cache(), tiempos: l.tiempos() }
@@ -641,6 +651,19 @@ fn ciclo_detalle_con(
         );
     }
     Some((det, arch))
+}
+
+/// Guarda ya en el archivo histórico lo de ahora (sin esperar a los 5 min ni a que cambie la
+/// firma) para que un informe lleve lo último. Respeta la comprobación de Consumo.exe: con él
+/// abierto no escribe, y el informe sale con los archivos que ya hay. Solo a petición del usuario.
+pub(crate) fn forzar_archivo(app: &AppHandle) {
+    let (c, d) = (app.state::<Consumo>(), app.state::<Detalle>());
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ciclo_detalle_con(&c, &d, ahora_s(), true, || !consumo_en_marcha())));
+    if let Ok(Some((_, arch))) = r {
+        if arch.escritos + arch.puenteados > 0 {
+            let _ = app.emit("consumo://archivo", ());
+        }
+    }
 }
 
 /// Último reparto calculado (no calcula: se rehace tras cada lectura de transcripciones, cada

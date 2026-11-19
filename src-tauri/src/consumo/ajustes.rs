@@ -80,6 +80,16 @@ pub fn leer_suscripcion(fichero: &Path) -> f64 {
     }
 }
 
+/// `suscripcion` de `consumo_ajustes.json` (solo lectura): los $ al mes con los que el resumen
+/// compara el coste a precio de API; un valor que no sirve (no es un número o < 0) vale 20.
+pub fn leer_suscripcion_usd(fichero: &Path) -> f64 {
+    let v = leer_json(fichero);
+    match v.get("suscripcion").and_then(Value::as_f64) {
+        Some(x) if x.is_finite() && x >= 0.0 => x,
+        _ => 20.0,
+    }
+}
+
 /// Guarda las tres claves conservando todo lo demás del fichero. Solo escribe si algo cambia
 /// (True) y de forma atómica. Un fichero que existe pero no es un objeto JSON no se toca.
 pub fn guardar_ajustes(fichero: &Path, ctx_max: u64, avisos: bool, gb_max: f64) -> io::Result<bool> {

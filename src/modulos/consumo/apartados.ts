@@ -61,6 +61,8 @@ export interface Entorno {
   reducido(): boolean;
   /** Abre el panel en AJUSTES → CONSUMO. */
   abrirAjustes(): void;
+  /** Línea de estado tenue del pie (desaparece sola a los pocos segundos). */
+  mensaje(texto: string): void;
 }
 
 export interface InfoApartado {

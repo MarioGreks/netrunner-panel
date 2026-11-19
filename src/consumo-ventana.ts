@@ -7,7 +7,8 @@
 // - Solo hay un temporizador: la cuenta atrás de 1 s, y solo con la ventana activa y un apartado
 //   que la use. Los repintados ocurren al llegar datos (consumo://estado, consumo://detalle…) o
 //   al redimensionar (un fotograma como mucho).
-// - Solo existe en el DOM el apartado activo.
+// - Solo existe en el DOM el apartado activo. La guía (módulo cargado al abrirla) y el menú de
+//   INFORMES no existen en el DOM hasta que se abren. Los informes solo se generan a petición.
 import "./styles/tokens.css";
 import "./styles/temas.css";
 import "./styles/hud.css";
@@ -31,10 +32,14 @@ import {
   diagnosticoConsumo,
   equipoConsumo,
   estadoConsumo,
+  generarHistoricoConsumo,
+  generarInformeConsumo,
   serieConsumo,
   vistaConsumo,
+  type TipoInformeConsumo,
 } from "./lib/ipc";
 import { APARTADOS, montarApartado, type Apartado, type Cambio, type Datos, type Entorno } from "./modulos/consumo/apartados";
+import type { Guia } from "./modulos/consumo/guia";
 
 iniciarTema();
 
@@ -43,6 +48,7 @@ const q = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 const main = q("main");
 const nav = q("nav");
 const datosEl = q("datos");
+const estadoEl = q("estado");
 
 const datos: Datos = { estado: null, recibidoEn: 0, serie: null, detalle: null, sesiones: [], diag: null, disco: null, equipo: "" };
 const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -50,6 +56,8 @@ const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)")
 let minimizada = false;
 let activa = false;
 let apartado: Apartado | null = null;
+let guia: Guia | null = null;
+let cargandoGuia = false;
 let indice = 0;
 let temporizador: number | undefined;
 let ultimoRefresco = 0;
@@ -59,8 +67,26 @@ const entorno: Entorno = {
   activo: () => activa,
   reducido: () => movimientoReducido.matches,
   abrirAjustes: () => void abrirAjustesConsumo().catch(() => {}),
+  mensaje: (t) => mostrarMensaje(t),
 };
 const esVisible = () => document.visibilityState === "visible" && !minimizada;
+
+// --- Línea de estado del pie: un texto tenue que se borra solo a los pocos segundos ---
+const MENSAJE_MS = 8000;
+let temporizadorMensaje: number | undefined;
+function mostrarMensaje(texto: string) {
+  estadoEl.textContent = texto;
+  estadoEl.title = texto;
+  clearTimeout(temporizadorMensaje);
+  temporizadorMensaje = undefined;
+  if (texto && !texto.endsWith("…")) {
+    temporizadorMensaje = window.setTimeout(() => {
+      estadoEl.textContent = "";
+      estadoEl.title = "";
+      temporizadorMensaje = undefined;
+    }, MENSAJE_MS);
+  }
+}
 
 // --- Datos ---
 const pintar = (c: Cambio) => {
@@ -80,7 +106,7 @@ const recibirEstado = (e: typeof datos.estado) => {
   datos.recibidoEn = Date.now();
   if (!activa) return;
   pintar("estado");
-  if (APARTADOS[indice].id === "ritmo") void cargarSerie();
+  if (!guia && APARTADOS[indice].id === "ritmo") void cargarSerie();
   if (e?.sinDatos && !datos.diag) void diagnosticoConsumo().then(recibirDiag).catch(() => {});
 };
 const recibirDiag = (d: typeof datos.diag) => {
@@ -121,6 +147,7 @@ const ajustarTemporizador = () => {
 };
 
 const mostrar = (i: number) => {
+  cerrarGuiaSinVolver();
   indice = i;
   apartado?.destruir();
   apartado = null;
@@ -144,7 +171,7 @@ APARTADOS.forEach((a, i) => {
   b.className = "cv__tab";
   b.setAttribute("role", "tab");
   b.textContent = a.titulo;
-  b.addEventListener("click", () => i !== indice && mostrar(i));
+  b.addEventListener("click", () => (guia || i !== indice) && mostrar(i));
   nav.appendChild(b);
 });
 
@@ -153,6 +180,7 @@ const aplicarActiva = () => {
   const v = esVisible();
   if (v === activa) return;
   activa = v;
+  if (!v) cerrarMenu();
   void vistaConsumo("ventana", v).catch(() => {});
   if (!v) {
     ajustarTemporizador();
@@ -170,7 +198,7 @@ const aplicarActiva = () => {
     pintarDisco();
   }).catch(() => {});
   apartado?.pintar("todo");
-  if (APARTADOS[indice].id === "ritmo") void cargarSerie();
+  if (!guia && APARTADOS[indice].id === "ritmo") void cargarSerie();
   ajustarTemporizador();
 };
 
@@ -204,16 +232,155 @@ void alDatosConsumo((d) => {
 // Por si la página se descarga sin que el núcleo lo note (el núcleo también lo apaga al destruirse)
 window.addEventListener("pagehide", () => void vistaConsumo("ventana", false).catch(() => {}));
 
+// --- Guía (F1 y botón «?»): una vista dentro de esta ventana, sin ventana nueva ---
+const botonGuia = q<HTMLButtonElement>("guia");
+
+function marcarBotonGuia(abierta: boolean) {
+  botonGuia.setAttribute("aria-pressed", String(abierta));
+  botonGuia.classList.toggle("cv__btn--activo", abierta);
+}
+
+/** Destruye la guía (si está abierta) sin remontar el apartado: lo hace `mostrar`. */
+function cerrarGuiaSinVolver() {
+  if (!guia) return;
+  guia.destruir();
+  guia = null;
+  marcarBotonGuia(false);
+}
+
+/** Vuelve al apartado en que se estaba. */
+const cerrarGuia = () => {
+  if (guia) mostrar(indice);
+};
+
+/** El módulo de la guía se carga al abrirla por primera vez: hasta entonces no existe. */
+const abrirGuia = async () => {
+  if (guia || cargandoGuia) return;
+  cargandoGuia = true;
+  try {
+    const m = await import("./modulos/consumo/guia");
+    if (guia) return;
+    cerrarMenu();
+    apartado?.destruir();
+    apartado = null;
+    ajustarTemporizador();
+    nav.querySelectorAll<HTMLButtonElement>(".cv__tab").forEach((b) => {
+      b.classList.remove("cv__tab--activa");
+      b.setAttribute("aria-selected", "false");
+    });
+    main.scrollTop = 0;
+    guia = m.montarGuia(main, cerrarGuia);
+    marcarBotonGuia(true);
+  } catch {
+    mostrarMensaje("NO SE PUDO ABRIR LA GUÍA");
+  } finally {
+    cargandoGuia = false;
+  }
+};
+const alternarGuia = () => (guia ? cerrarGuia() : void abrirGuia());
+
+// --- Menú INFORMES: solo existe en el DOM mientras está abierto ---
+const botonInformes = q<HTMLButtonElement>("informes");
+type ItemInforme = [texto: string, tipo: TipoInformeConsumo | "historico", anterior: boolean];
+const ITEMS_INFORME: ItemInforme[] = [
+  ["ESTA SEMANA", "semana", false],
+  ["SEMANA PASADA", "semana", true],
+  ["ESTE MES", "mes", false],
+  ["MES PASADO", "mes", true],
+  ["TRIMESTRE", "trimestre", false],
+  ["SEMESTRE", "semestre", false],
+  ["AÑO", "anio", false],
+  ["HISTÓRICO TOTAL", "historico", false],
+];
+let menu: HTMLElement | null = null;
+let generando = false;
+
+const mensajeError = (e: unknown) => (typeof e === "string" && e ? e : "NO SE PUDO GENERAR EL INFORME");
+
+function generarInforme([, tipo, anterior]: ItemInforme) {
+  if (generando) return;
+  generando = true;
+  botonInformes.disabled = true;
+  mostrarMensaje("GENERANDO INFORME…");
+  (tipo === "historico" ? generarHistoricoConsumo() : generarInformeConsumo(tipo, anterior))
+    .then(mostrarMensaje)
+    .catch((e) => mostrarMensaje(mensajeError(e)))
+    .finally(() => {
+      generando = false;
+      botonInformes.disabled = false;
+    });
+}
+
+const fueraDelMenu = (ev: Event) => {
+  if (menu && !menu.contains(ev.target as Node) && !botonInformes.contains(ev.target as Node)) cerrarMenu();
+};
+
+function cerrarMenu() {
+  if (!menu) return;
+  menu.remove();
+  menu = null;
+  botonInformes.setAttribute("aria-expanded", "false");
+  botonInformes.classList.remove("cv__btn--activo");
+  document.removeEventListener("pointerdown", fueraDelMenu, true);
+  window.removeEventListener("blur", cerrarMenu);
+}
+
+function abrirMenu() {
+  if (menu || generando) return;
+  menu = document.createElement("div");
+  menu.className = "cv__menu";
+  menu.setAttribute("role", "menu");
+  for (const item of ITEMS_INFORME) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "cv__menu-item";
+    b.setAttribute("role", "menuitem");
+    b.textContent = item[0];
+    b.addEventListener("click", () => {
+      cerrarMenu();
+      generarInforme(item);
+    });
+    menu.appendChild(b);
+  }
+  botonInformes.parentElement!.appendChild(menu);
+  botonInformes.setAttribute("aria-expanded", "true");
+  botonInformes.classList.add("cv__btn--activo");
+  document.addEventListener("pointerdown", fueraDelMenu, true);
+  window.addEventListener("blur", cerrarMenu);
+  menu.querySelector<HTMLButtonElement>(".cv__menu-item")?.focus();
+}
+
 // --- Barra de título ---
 const ventana = getCurrentWindow();
 q("minimizar").addEventListener("click", () => void ventana.minimize().catch(() => {}));
 q("ajustes").addEventListener("click", entorno.abrirAjustes);
 q("cerrar").addEventListener("click", () => void ventana.close().catch(() => {}));
+botonGuia.addEventListener("click", alternarGuia);
+botonInformes.addEventListener("click", () => (menu ? cerrarMenu() : abrirMenu()));
 
-// Esc no cierra (es una ventana normal); las flechas cambian de apartado
+// F1: la guía; Esc: cierra el menú o vuelve de la guía (no cierra la ventana); las flechas cambian de apartado
 window.addEventListener("keydown", (e) => {
+  if (e.key === "F1") {
+    e.preventDefault();
+    alternarGuia();
+    return;
+  }
+  if (e.key === "Escape") {
+    if (menu) {
+      cerrarMenu();
+      botonInformes.focus();
+    } else cerrarGuia();
+    return;
+  }
+  if (menu && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    e.preventDefault();
+    const items = [...menu.querySelectorAll<HTMLButtonElement>(".cv__menu-item")];
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    items[(i + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length]?.focus();
+    return;
+  }
   if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-  if ((e.target as HTMLElement | null)?.closest("input, textarea")) return;
+  if (menu || guia || (e.target as HTMLElement | null)?.closest("input, textarea")) return;
   const n = APARTADOS.length;
   mostrar((indice + (e.key === "ArrowRight" ? 1 : n - 1)) % n);
 });

@@ -639,6 +639,14 @@ export interface SemanaArchivadaConsumo {
   equipos: EquipoSemanaConsumo[];
   dias: number;
 }
+// --- Informes HTML (solo a petición: se generan, se guardan en Descargas y se abren en el navegador) ---
+export type TipoInformeConsumo = "semana" | "mes" | "trimestre" | "semestre" | "anio";
+/** Resumen del periodo actual o del anterior. Devuelve «RESUMEN GUARDADO EN DESCARGAS: <nombre>». */
+export const generarInformeConsumo = (tipo: TipoInformeConsumo, anterior = false) =>
+  invoke<string>("generar_informe_consumo", { tipo, anterior });
+/** Histórico total, o solo el periodo de `vista` (`periodo` y, si es «personalizado», `desde` y `hasta`). */
+export const generarHistoricoConsumo = (vista?: Pick<VistaHistoricoPedida, "periodo" | "desde" | "hasta">) =>
+  invoke<string>("generar_historico_consumo", { vista: vista ?? null });
 /** Semanas archivadas, de la más nueva a la más vieja. */
 export const semanasArchivadas = () => invoke<SemanaArchivadaConsumo[]>("semanas_archivadas");
 /** Se escribió (o se copió entre carpetas) algún archivo semanal, sin carga: volver a pedir `historicoConsumo`. */

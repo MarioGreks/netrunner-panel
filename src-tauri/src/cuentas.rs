@@ -293,6 +293,17 @@ pub fn marcar_cuenta(app: AppHandle, evento: Evento) -> Result<(), String> {
     modificar(&app, |l| anadir(l, &evento, Utc::now()))
 }
 
+/// El evento se borró en Outlook: su cuenta atrás (si la tenía) ya no tiene sentido.
+pub fn quitar_por_evento(app: &AppHandle, id_evento: &str) {
+    let hay = app.state::<Cuentas>().lista.lock().unwrap().iter().any(|c| c.id_evento == id_evento && !c.borrada);
+    if hay {
+        let _ = modificar(app, |l| {
+            quitar(l, id_evento, ahora_ms());
+            Ok(())
+        });
+    }
+}
+
 #[tauri::command]
 pub fn desmarcar_cuenta(app: AppHandle, id_evento: String) -> Result<(), String> {
     modificar(&app, |l| {
@@ -329,6 +340,8 @@ mod pruebas {
             ubicacion: None,
             categorias: vec![],
             descripcion: None,
+            recurrente: false,
+            pendiente: false,
         }
     }
 

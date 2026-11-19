@@ -1,6 +1,7 @@
 // Módulo TIEMPO: tiempo meteorológico (Open-Meteo) y agenda (ICS de Outlook).
 import {
   alEvento,
+  borrarEvento,
   categoriasOutlook,
   crearEvento,
   desmarcarCuenta,
@@ -16,6 +17,7 @@ import {
   type EstadoCalendario,
   type EstadoMeteo,
   type EventoCalendario,
+  type FalloPendiente,
   type HoraMeteo,
 } from "../../lib/ipc";
 import { abrirAjustes, alIrAEvento, tomarEventoPendiente } from "../../lib/navegacion";
@@ -187,7 +189,7 @@ export function montar(contenedor: HTMLElement): void {
         "AGENDA",
         `<span class="marco__etiqueta" data-id="agenda-hace"></span>
          <button class="tmp__engranaje" data-id="engranaje" type="button" title="Ajustes del calendario" aria-label="Abrir los ajustes">${ENGRANAJE}</button>
-         <button class="tmp__sync tmp__nuevo-btn" data-id="nuevo-btn" type="button" title="Comprobando Outlook…" disabled>+ EVENTO</button>
+         <button class="tmp__sync tmp__nuevo-btn" data-id="nuevo-btn" type="button" title="Crear un evento: se envía a Outlook ahora o cuando lo abras">+ EVENTO</button>
          <button class="tmp__sync tmp__hoy" data-id="hoy" type="button" title="Volver a hoy" hidden>HOY</button>
          <button class="tmp__sync" data-id="sync" type="button" title="Sincronizar ahora"><span class="tmp__giro" data-id="giro">⟳</span> SYNC</button>`,
         `<form class="tmp__nuevo" data-id="nuevo" autocomplete="off" hidden>
@@ -234,6 +236,9 @@ export function montar(contenedor: HTMLElement): void {
   let tieneUrl = false;
   let cuentas: CuentaAtras[] = [];
   let marcadas = new Set<string>();
+  /** Evento cuyo borrado espera confirmación, y si ya se está borrando. */
+  let confirmandoId: string | null = null;
+  let borrando = false;
 
   // Estado del pintado por tandas
   interface Entrada {
@@ -359,27 +364,54 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     { root: scroll, rootMargin: "0px 0px 240px 0px" },
   );
 
+  /** El borrado se apunta en la cola y se lleva a Outlook cuando está abierto (el ICS es de solo
+   *  lectura); las series no se borran desde el panel, así que no llevan botón. */
+  const puedeBorrar = (ev: EventoCalendario) => !!ev.id && !ev.recurrente;
+  const textoConfirmacion = (ev: EventoCalendario) =>
+    ev.pendiente
+      ? "Se descarta de la agenda y de Outlook."
+      : outlook?.estado === "conectado"
+        ? "Sale de la agenda y se borra de Outlook ahora (irá a Elementos eliminados)."
+        : "Sale de la agenda ya; se borrará de Outlook cuando lo abras.";
+
   const htmlEvento = (l: Linea): string => {
     const ev = l.ev;
     const ahora = ahoraPintado;
     const enCurso = !ev.todo_el_dia && l.inicio <= ahora && ahora < l.fin;
     const pasado = !ev.todo_el_dia && l.fin <= ahora && mismoDia(l.fin, ahora);
     const futuro = l.inicio > ahora;
-    const clases = ["tmp__evento", enCurso ? "tmp__evento--curso" : "", pasado ? "tmp__evento--pasado" : ""].join(" ");
+    const borrable = puedeBorrar(ev);
+    const confirmando = borrable && confirmandoId === ev.id;
+    const clases = [
+      "tmp__evento",
+      enCurso ? "tmp__evento--curso" : "",
+      pasado ? "tmp__evento--pasado" : "",
+      confirmando ? "tmp__evento--confirma" : "",
+    ].join(" ");
     const marca = marcadas.has(ev.id);
     const estrella =
-      futuro && ev.id
+      futuro && ev.id && !ev.pendiente
         ? `<button class="tmp__estrella${marca ? " tmp__estrella--on" : ""}" type="button" data-evid="${esc(ev.id)}" aria-pressed="${marca}" title="${marca ? "Quitar la cuenta atrás" : "Cuenta atrás"}">★</button>`
         : "";
+    const papelera = borrable
+      ? `<button class="tmp__borrar" type="button" data-evid="${esc(ev.id)}" title="Borrar el evento de Outlook" aria-label="Borrar el evento ${esc(ev.titulo)}">✕</button>`
+      : "";
+    const confirmacion = confirmando
+      ? `<div class="tmp__confirma" role="alertdialog" aria-label="Confirmar el borrado">
+          <span class="tmp__confirma-texto">¿BORRAR «${esc(ev.titulo)}» ?<small>${textoConfirmacion(ev)}</small></span>
+          <button class="tmp__btn" type="button" data-borrar="no" data-evid="${esc(ev.id)}"${borrando ? " disabled" : ""}>CANCELAR</button>
+          <button class="tmp__btn tmp__btn--peligro" type="button" data-borrar="si" data-evid="${esc(ev.id)}"${borrando ? " disabled" : ""}>${borrando ? "BORRANDO…" : "BORRAR"}</button>
+        </div>`
+      : "";
     return `
       <div class="${clases}" data-evid="${esc(ev.id)}">
         <span class="tmp__hora-ev">${ev.todo_el_dia ? "TODO EL DÍA" : hhmm(l.inicio)}</span>
         <span class="tmp__ev-texto">
-          <span class="tmp__ev-fila"><span class="tmp__ev-t" title="${esc(ev.titulo)}">${esc(ev.titulo)}</span>${l === siguiente ? `<span class="tmp__marca">SIGUIENTE</span>` : ""}</span>
+          <span class="tmp__ev-fila"><span class="tmp__ev-t" title="${esc(ev.titulo)}">${esc(ev.titulo)}</span>${l === siguiente ? `<span class="tmp__marca">SIGUIENTE</span>` : ""}${ev.pendiente ? `<span class="tmp__marca tmp__marca--pendiente" title="Creado desde el panel: se envía a Outlook cuando esté abierto y la agenda lo confirmará al sincronizar">PENDIENTE</span>` : ""}</span>
           ${subtituloCategoria(ev.categorias ?? [])}
           ${ev.ubicacion ? `<span class="tmp__ev-ubic">${esc(ev.ubicacion)}</span>` : ""}
         </span>
-        ${estrella}
+        ${estrella}${papelera}${confirmacion}
       </div>`;
   };
 
@@ -420,7 +452,10 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
   const pintarAgenda = () => {
     const s = agenda;
     giro.classList.toggle("tmp__giro--activo", !!s?.sincronizando);
-    agendaHace.textContent = tieneUrl || s?.ultima_sync ? hace(s?.ultima_sync ?? null) : "";
+    const aviso = tieneUrl || s?.ultima_sync ? hace(s?.ultima_sync ?? null) : "";
+    const esperando = s?.pendientes ?? 0;
+    agendaHace.textContent = esperando > 0 ? `${aviso}${aviso ? " · " : ""}${esperando} PARA OUTLOOK` : aviso;
+    agendaHace.title = esperando > 0 ? "Cambios hechos desde el panel que esperan a que Outlook esté abierto" : "";
     errorAgenda.hidden = !(tieneUrl && s?.error);
     errorAgenda.textContent = tieneUrl && s?.error ? s.error : "";
     observador.unobserve(centinela);
@@ -565,6 +600,58 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     });
   });
 
+  // --- Borrar un evento (en Outlook; con confirmación) ---
+  scroll.addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>(".tmp__borrar, [data-borrar]");
+    const id = b?.dataset.evid;
+    if (!b || !id || borrando) return;
+    const accion = b.dataset.borrar;
+    if (accion === undefined) {
+      // «✕»: pide confirmación en la propia fila (y deja el foco en CANCELAR, la opción segura)
+      confirmandoId = id;
+      pintarAgenda();
+      scroll
+        .querySelector<HTMLElement>(`.tmp__evento[data-evid="${CSS.escape(id)}"] [data-borrar="no"]`)
+        ?.focus();
+      return;
+    }
+    if (accion === "no") {
+      confirmandoId = null;
+      pintarAgenda();
+      return;
+    }
+    const ev = porId.get(id);
+    if (!ev || confirmandoId !== id) return;
+    borrando = true;
+    pintarAgenda();
+    borrarEvento(ev)
+      .then(() => {
+        avisar(
+          outlook?.estado === "conectado" || ev.pendiente
+            ? "Evento quitado de la agenda"
+            : "Quitado de la agenda · se borrará de Outlook cuando lo abras",
+          true,
+          6000,
+        );
+      })
+      .catch((err) => {
+        avisar(typeof err === "string" ? err.toUpperCase() : "NO SE PUDO BORRAR EL EVENTO", false, 8000);
+      })
+      .finally(() => {
+        borrando = false;
+        confirmandoId = null;
+        if (vivo) pintarAgenda();
+      });
+  });
+  // Esc cancela la confirmación
+  contenedor.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && confirmandoId && !borrando) {
+      e.stopPropagation();
+      confirmandoId = null;
+      pintarAgenda();
+    }
+  });
+
   // Los botones «CONFIGURAR» de los marcos vacíos llevan a su sección de AJUSTES
   contenedor.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>("[data-accion]");
@@ -592,18 +679,12 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
   let outlook: EstadoCorreo | null = null;
   let creando = false;
 
-  const motivoOutlook = (): string | null => {
-    if (!outlook) return "Comprobando Outlook…";
-    if (outlook.estado === "conectado") return null;
-    if (outlook.estado === "cerrado") return "Outlook está cerrado: ábrelo para crear eventos";
-    if (outlook.estado === "conectando") return "Conectando con Outlook…";
-    return `Outlook no responde${outlook.detalle ? `: ${outlook.detalle}` : ""}`;
-  };
+  /** Crear no depende de Outlook: el evento se apunta y se envía cuando Outlook está abierto. */
   const pintarNuevoBtn = () => {
-    const m = motivoOutlook();
-    nuevoBtn.disabled = m !== null;
-    nuevoBtn.title = m ?? "Crear un evento en tu calendario de Outlook";
-    if (m !== null && !creando) form.hidden = true;
+    nuevoBtn.title =
+      outlook?.estado === "conectado"
+        ? "Crear un evento en tu calendario de Outlook"
+        : "Crear un evento: Outlook no está abierto, se enviará cuando lo abras";
   };
 
   const fechaIso = (d: Date) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
@@ -692,7 +773,13 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
         categorias: cats,
       });
       form.hidden = true;
-      avisar("Creado · aparecerá en la agenda en unos minutos", true, 8000);
+      avisar(
+        outlook?.estado === "conectado"
+          ? "Creado · enviándolo a Outlook"
+          : "Creado · se enviará a Outlook cuando lo abras",
+        true,
+        6000,
+      );
     } catch (e) {
       mensajeForm(typeof e === "string" ? e : "No se pudo crear el evento", true);
     } finally {
@@ -741,6 +828,10 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     pintarCuentas();
     actualizarEstrellas();
   };
+  const recibirOutlook = (e: EstadoCorreo) => {
+    outlook = e;
+    pintarNuevoBtn();
+  };
   const recibirMeteo = (m: EstadoMeteo) => {
     if (!comprobar()) return;
     meteo = m;
@@ -784,11 +875,17 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
   }));
   suscribir(alEvento<EstadoMeteo>("meteo://estado", recibirMeteo));
   suscribir(alEvento<CuentaAtras[]>("cuentas://estado", recibirCuentas));
+  // Outlook no pudo llevar a cabo una acción apuntada (reunión con invitados, evento no encontrado…)
+  suscribir(
+    alEvento<FalloPendiente>("pendientes://fallo", (f) => {
+      if (!comprobar()) return;
+      avisar(`${f.titulo.toUpperCase()}: ${f.mensaje}`, false, 12000);
+    }),
+  );
   suscribir(
     alEvento<EstadoCorreo>("correo://estado", (e) => {
       if (!comprobar()) return;
-      outlook = e;
-      pintarNuevoBtn();
+      recibirOutlook(e);
     }),
   );
   // La tira se plegó o desplegó en el otro equipo
@@ -815,9 +912,7 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     estadoCuentas().then(recibirCuentas).catch(() => {});
     estadoCorreo()
       .then((e) => {
-        if (!vivo) return;
-        outlook = e;
-        pintarNuevoBtn();
+        if (vivo) recibirOutlook(e);
       })
       .catch(() => {});
   });

@@ -92,10 +92,17 @@ export interface EventoCalendario {
   categorias: string[];
   /** Primeras ~200 letras de la descripción (aún no se muestra) */
   descripcion: string | null;
+  /** Ocurrencia de una serie o excepción de una serie: no se puede borrar desde el panel. */
+  recurrente: boolean;
+  /** Creado desde el panel y aún no publicado por el ICS (vive en la cola de pendientes). */
+  pendiente: boolean;
 }
 
 export interface EstadoCalendario {
+  /** El ICS más lo creado (y menos lo borrado) desde el panel que Outlook aún no ha procesado. */
   eventos: EventoCalendario[];
+  /** Creaciones y borrados a la espera de que Outlook esté abierto. */
+  pendientes: number;
   ultima_sync: string | null;
   sincronizando: boolean;
   error: string | null;
@@ -310,7 +317,17 @@ export interface NuevoEvento {
   categorias: string[];
 }
 
+/** Crea el evento: aparece en la agenda al instante (marcado `pendiente`) y se envía a Outlook ahora o cuando se abra. */
 export const crearEvento = (evento: NuevoEvento) => invoke<void>("crear_evento", { evento });
+/** Quita el evento de la agenda al instante y lo borra de Outlook (va a «Elementos eliminados») ahora o cuando
+ *  se abra. Rechaza las series; si luego Outlook no puede (reunión con invitados, no encontrado) llega un
+ *  `pendientes://fallo` y el evento vuelve. */
+export const borrarEvento = (evento: EventoCalendario) => invoke<void>("borrar_evento", { evento });
+
+export interface FalloPendiente {
+  titulo: string;
+  mensaje: string;
+}
 
 export type EventoPanel =
   | "panel://mostrar"
@@ -331,6 +348,7 @@ export type EventoPanel =
   | "musica://estado"
   | "accesos://estado"
   | "correo://estado"
+  | "pendientes://fallo"
   | "actualizador://progreso"
   | "actualizador://instalando";
 

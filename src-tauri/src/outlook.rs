@@ -36,7 +36,9 @@ use windows::Win32::System::Variant::{
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{AllowSetForegroundWindow, ASFW_ANY, SW_SHOWMINNOACTIVE};
 
+use crate::calendario::Evento;
 use crate::estado::Estado;
+use crate::pendientes::{self, Operacion};
 use crate::ventanas;
 
 /// Cada cuánto se relee el correo.
@@ -55,6 +57,10 @@ const OL_CLASE_CORREO: i32 = 43;
 const OL_CARPETA_BANDEJA: i32 = 6;
 const OL_CARPETA_CALENDARIO: i32 = 9;
 const OL_ITEM_CITA: i32 = 1;
+const OL_CLASE_CITA: i32 = 26;
+const MSG_CERRADO: &str = "Outlook no está abierto";
+/// Tope de citas que se recorren por calendario al buscar un evento a borrar.
+const MAX_CITAS_BARRIDO: usize = 5000;
 
 // ===========================================================================
 // Lógica pura (sin COM): filtro, fragmento, fechas OLE, categorías y validación
@@ -187,7 +193,7 @@ pub fn formato_categorias(cats: &[String]) -> String {
 }
 
 /// Datos del formulario «+ EVENTO». Fechas locales `AAAA-MM-DDTHH:MM` (sin zona).
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NuevoEvento {
     pub titulo: String,
     pub inicio: String,
@@ -235,6 +241,105 @@ pub fn validar_evento(e: &NuevoEvento) -> Result<(NaiveDateTime, NaiveDateTime),
         return Err("La hora de fin debe ser posterior a la de inicio".into());
     }
     Ok((ini, fin))
+}
+
+// ---------------------------------------------------------------------------
+// Borrado de eventos
+// ---------------------------------------------------------------------------
+//
+// La agenda del panel se lee de un ICS de solo lectura: no se puede borrar nada en él. El
+// único calendario que el panel puede modificar es el del Outlook clásico abierto (COM),
+// así que «borrar» es localizar el mismo evento en Outlook y borrarlo ahí (Outlook lo manda
+// a «Elementos eliminados», donde se puede recuperar). Se rechaza todo lo que no sea una
+// cita suelta e inequívoca: series (borrar una ocurrencia o toda la serie es decisión del
+// usuario en Outlook), reuniones con invitados (borrarlas decide si se avisa a los demás)
+// y coincidencias dudosas.
+
+/// Datos de una cita de Outlook que bastan para reconocer un evento de la agenda.
+#[derive(Debug, Clone)]
+pub struct CitaLeida {
+    /// `GlobalAppointmentID`; el ICS de Exchange suele usarlo como UID.
+    pub global_id: String,
+    pub titulo: String,
+    pub inicio: NaiveDateTime,
+    pub fin: NaiveDateTime,
+    pub todo_el_dia: bool,
+    pub recurrente: bool,
+    /// `MeetingStatus` distinto de `olNonMeeting`: tiene (o tuvo) invitados.
+    pub es_reunion: bool,
+}
+
+const MSG_SERIE: &str = "Es un evento recurrente: bórralo desde Outlook (allí eliges si es una ocurrencia o toda la serie)";
+const MSG_NO_ENCONTRADO: &str =
+    "No se encontró el evento en tu Outlook (puede ser de un calendario de solo lectura o estar ya borrado)";
+const MSG_VARIOS: &str = "Hay varios eventos iguales en Outlook: bórralo desde Outlook para no borrar otro por error";
+const MSG_REUNION: &str = "Es una reunión con invitados: bórrala desde Outlook para decidir si se avisa a los asistentes";
+
+/// Comprobaciones previas al borrado que no necesitan Outlook.
+pub fn validar_borrado(ev: &Evento) -> Result<(), String> {
+    if ev.id.trim().is_empty() {
+        return Err("El evento no tiene identificador".into());
+    }
+    if ev.recurrente {
+        return Err(MSG_SERIE.into());
+    }
+    Ok(())
+}
+
+/// Margen de búsqueda alrededor del inicio del evento. Cubre cualquier diferencia de zona
+/// horaria del filtro DASL; la coincidencia exacta se comprueba después, cita a cita.
+pub fn ventana_borrado(ev: &Evento) -> (NaiveDateTime, NaiveDateTime) {
+    let ini = ev.inicio.naive_local();
+    (ini - Dur::days(1), ini + Dur::days(1))
+}
+
+/// Filtro DASL (independiente del idioma) de las citas que empiezan entre `desde` y `hasta`.
+pub fn filtro_dasl_citas(desde: NaiveDateTime, hasta: NaiveDateTime) -> String {
+    format!(
+        "@SQL=\"urn:schemas:calendar:dtstart\" >= '{}' AND \"urn:schemas:calendar:dtstart\" <= '{}'",
+        desde.format("%Y-%m-%d %H:%M"),
+        hasta.format("%Y-%m-%d %H:%M")
+    )
+}
+
+fn mismo_instante(a: NaiveDateTime, b: NaiveDateTime) -> bool {
+    (a - b).num_seconds().abs() < 60
+}
+
+fn coincide_por_uid(ev: &Evento, c: &CitaLeida) -> bool {
+    let uid = ev.uid.trim();
+    !uid.is_empty() && uid.eq_ignore_ascii_case(c.global_id.trim())
+}
+
+fn coincide_por_datos(ev: &Evento, c: &CitaLeida) -> bool {
+    c.titulo.trim().to_lowercase() == ev.titulo.trim().to_lowercase()
+        && c.todo_el_dia == ev.todo_el_dia
+        && mismo_instante(c.inicio, ev.inicio.naive_local())
+        && mismo_instante(c.fin, ev.fin.naive_local())
+}
+
+/// Decide cuál de las citas de Outlook es el evento de la agenda. Se prefiere el UID; sin
+/// coincidencia por UID, título + inicio + fin. Devuelve error (y no se borra nada) si no hay
+/// ninguna, si hay varias, o si la elegida es una serie o una reunión con invitados.
+pub fn elegir_cita(ev: &Evento, citas: &[CitaLeida]) -> Result<usize, String> {
+    let por_uid: Vec<usize> = (0..citas.len()).filter(|&i| coincide_por_uid(ev, &citas[i])).collect();
+    let candidatas = if por_uid.is_empty() {
+        (0..citas.len()).filter(|&i| coincide_por_datos(ev, &citas[i])).collect()
+    } else {
+        por_uid
+    };
+    let i = match candidatas.as_slice() {
+        [] => return Err(MSG_NO_ENCONTRADO.into()),
+        [i] => *i,
+        _ => return Err(MSG_VARIOS.into()),
+    };
+    if citas[i].recurrente {
+        return Err(MSG_SERIE.into());
+    }
+    if citas[i].es_reunion {
+        return Err(MSG_REUNION.into());
+    }
+    Ok(i)
 }
 
 /// Filtro DASL de Outlook, independiente del idioma, para los correos recibidos desde `desde`.
@@ -667,7 +772,8 @@ enum Peticion {
     LanzarOutlook(Sender<Result<(), String>>),
     AbrirCorreo { entry_id: String, store_id: String, resp: Sender<Result<(), String>> },
     Categorias(Sender<Result<Vec<String>, String>>),
-    CrearEvento { evento: NuevoEvento, resp: Sender<Result<(), String>> },
+    /// Llevar a Outlook las creaciones y borrados apuntados en la cola de `pendientes`.
+    VaciarCola,
 }
 
 struct Datos {
@@ -818,7 +924,11 @@ impl Motor {
         self.proxima = Instant::now() + INTERVALO;
         let esperando = self.conectando_hasta.map(|t| Instant::now() < t).unwrap_or(false);
         match self.intentar() {
-            Intento::Bien => self.conectando_hasta = None,
+            Intento::Bien => {
+                self.conectando_hasta = None;
+                // Outlook está abierto: se llevan a él las acciones que esperaban
+                self.vaciar_cola();
+            }
             Intento::Cerrado => {
                 if esperando {
                     return; // sigue arrancando
@@ -830,6 +940,10 @@ impl Motor {
                 } else {
                     self.conectando_hasta = None;
                     self.fijar("cerrado", "", true);
+                    // Con acciones esperando, se vigila más a menudo si Outlook se abre
+                    if pendientes::hay_por_enviar(&self.app) {
+                        self.proxima = Instant::now() + REINTENTO;
+                    }
                 }
             }
             Intento::Fallo(e) => {
@@ -1037,8 +1151,51 @@ impl Motor {
             Peticion::Categorias(resp) => {
                 let _ = resp.send(self.categorias());
             }
-            Peticion::CrearEvento { evento, resp } => {
-                let _ = resp.send(self.crear_evento(&evento));
+            Peticion::VaciarCola => {
+                // Con Outlook cerrado no se hace nada: la cola espera (y se reintenta cada 30 s)
+                if matches!(conectar(), Ok(Some(_))) {
+                    self.vaciar_cola();
+                }
+            }
+        }
+    }
+
+    /// Lleva a Outlook, en orden, lo que el usuario creó o borró desde el panel mientras
+    /// Outlook estaba cerrado (o hace un instante). Los fallos pasajeros se reintentan; los
+    /// definitivos (serie, reunión, evento no encontrado…) se descartan y se avisa.
+    fn vaciar_cola(&mut self) {
+        let mut enviado = false;
+        for op in pendientes::por_enviar(&self.app) {
+            let clave = op.clave();
+            let r = match &op {
+                Operacion::Crear { evento, .. } => match validar_evento(evento) {
+                    Err(m) => Err(ErrOp::Definitivo(m)),
+                    Ok(_) => self.crear_evento(evento).map_err(ErrOp::Transitorio),
+                },
+                Operacion::Borrar { evento, .. } => self.borrar_evento(evento),
+            };
+            match r {
+                Ok(()) => {
+                    pendientes::operacion_enviada(&self.app, &clave);
+                    enviado = true;
+                }
+                Err(ErrOp::Definitivo(m)) => pendientes::descartar(&self.app, &op, &m),
+                Err(ErrOp::Transitorio(m)) => {
+                    if m == MSG_CERRADO {
+                        break; // Outlook se cerró: se sigue otro día, sin gastar intentos
+                    }
+                    pendientes::fallo_transitorio(&self.app, &clave, &m);
+                }
+            }
+        }
+        if enviado {
+            // Outlook tarda en subir los cambios: se vuelve a leer el ICS a los 90 s y a los 4 min
+            for segundos in [90u64, 240] {
+                let h = self.app.clone();
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_secs(segundos));
+                    crate::calendario::sincronizar(&h);
+                });
             }
         }
     }
@@ -1046,7 +1203,7 @@ impl Motor {
     fn con_outlook(&self) -> Result<Obj, String> {
         match conectar() {
             Ok(Some(o)) => Ok(o),
-            Ok(None) => Err("Outlook no está abierto".to_string()),
+            Ok(None) => Err(MSG_CERRADO.to_string()),
             Err(e) => Err(e.to_string()),
         }
     }
@@ -1139,6 +1296,91 @@ impl Motor {
     }
 }
 
+/// Citas de todos los calendarios principales de Outlook que empiezan cerca del evento.
+fn buscar_citas(app: &Obj, ev: &Evento) -> Res<Vec<(Obj, CitaLeida)>> {
+    let (desde, hasta) = ventana_borrado(ev);
+    let sesion = app.get("Session")?.obj()?;
+    let almacenes = sesion.get("Stores")?.obj()?;
+    let total = almacenes.get("Count")?.entero();
+    let mut salida: Vec<(Obj, CitaLeida)> = Vec::new();
+    for i in 1..=total {
+        let Ok(almacen) = almacenes.call("Item", &[Arg::I32(i)]).and_then(|v| v.obj()) else { continue };
+        let Ok(carpeta) = almacen
+            .call("GetDefaultFolder", &[Arg::I32(OL_CARPETA_CALENDARIO)])
+            .and_then(|v| v.obj())
+        else {
+            continue;
+        };
+        let Ok(items) = carpeta.get("Items").and_then(|v| v.obj()) else { continue };
+        // Si el filtro falla o no devuelve nada se recorre todo (con tope); cada cita se
+        // vuelve a comprobar por fecha, así que el filtro solo sirve para ir más rápido.
+        let lista = match items
+            .call("Restrict", &[Arg::Str(filtro_dasl_citas(desde, hasta))])
+            .and_then(|v| v.obj())
+        {
+            Ok(r) if r.get("Count").map(|c| c.entero()).unwrap_or(0) > 0 => r,
+            Err(e) if e.desconexion() => return Err(e),
+            _ => items,
+        };
+        let mut actual = lista.call("GetFirst", &[]).ok().and_then(|v| v.obj_opt());
+        let mut vistas = 0;
+        while let Some(it) = actual {
+            if vistas >= MAX_CITAS_BARRIDO {
+                break;
+            }
+            vistas += 1;
+            actual = lista.call("GetNext", &[]).ok().and_then(|v| v.obj_opt());
+            if it.get("Class").map(|c| c.entero()).unwrap_or(0) != OL_CLASE_CITA {
+                continue;
+            }
+            let Some(inicio) = it.get("Start").ok().and_then(|v| v.fecha()).and_then(ole_a_naive) else { continue };
+            if inicio < desde || inicio > hasta {
+                continue;
+            }
+            let Some(fin) = it.get("End").ok().and_then(|v| v.fecha()).and_then(ole_a_naive) else { continue };
+            let cita = CitaLeida {
+                global_id: it.get("GlobalAppointmentID").map(|v| v.texto()).unwrap_or_default(),
+                titulo: it.get("Subject").map(|v| v.texto()).unwrap_or_default(),
+                inicio,
+                fin,
+                todo_el_dia: it.get("AllDayEvent").map(|v| v.bool()).unwrap_or(false),
+                // Si no se puede saber, se trata como serie / reunión: no se borra
+                recurrente: it.get("IsRecurring").map(|v| v.bool()).unwrap_or(true),
+                es_reunion: it.get("MeetingStatus").map(|v| v.entero() != 0).unwrap_or(true),
+            };
+            salida.push((it, cita));
+        }
+    }
+    Ok(salida)
+}
+
+impl Motor {
+    /// Borra la cita de Outlook que corresponde al evento (va a «Elementos eliminados»).
+    fn borrar_evento(&mut self, ev: &Evento) -> Result<(), ErrOp> {
+        validar_borrado(ev).map_err(ErrOp::Definitivo)?;
+        let app = self.con_outlook().map_err(ErrOp::Transitorio)?;
+        let texto_error = |e: ErrCom| {
+            ErrOp::Transitorio(if e.desconexion() {
+                "Outlook se cerró mientras se borraba el evento".to_string()
+            } else {
+                format!("No se pudo borrar el evento: {e}")
+            })
+        };
+        let halladas = buscar_citas(&app, ev).map_err(texto_error)?;
+        let citas: Vec<CitaLeida> = halladas.iter().map(|(_, c)| c.clone()).collect();
+        let i = elegir_cita(ev, &citas).map_err(ErrOp::Definitivo)?;
+        halladas[i].0.call("Delete", &[]).map(|_| ()).map_err(texto_error)
+    }
+}
+
+/// Resultado fallido de una operación de la cola.
+enum ErrOp {
+    /// No se va a poder nunca (serie, reunión, evento no encontrado…): se descarta y se avisa.
+    Definitivo(String),
+    /// Puede arreglarse solo (Outlook cerrado u ocupado): se reintenta.
+    Transitorio(String),
+}
+
 fn bucle(app: AppHandle, rx: mpsc::Receiver<Peticion>) {
     // SAFETY: este hilo es el STA que posee todos los objetos COM de Outlook.
     unsafe {
@@ -1201,18 +1443,28 @@ pub async fn categorias_outlook(app: AppHandle) -> Result<Vec<String>, String> {
     en_hilo(move || pedir(&app, Peticion::Categorias, Duration::from_secs(30))).await
 }
 
+/// Pide al hilo de Outlook que vacíe la cola de pendientes (si Outlook está abierto).
+fn despertar_cola(app: &AppHandle) {
+    let _ = enviar(app, Peticion::VaciarCola);
+}
+
+/// Crea un evento: aparece en la agenda al instante (marcado «pendiente») y se crea en
+/// Outlook ahora si está abierto, o en cuanto se abra.
 #[tauri::command]
 pub async fn crear_evento(app: AppHandle, evento: NuevoEvento) -> Result<(), String> {
-    validar_evento(&evento)?;
-    let h = app.clone();
-    en_hilo(move || pedir(&h, |resp| Peticion::CrearEvento { evento, resp }, Duration::from_secs(60))).await?;
-    // Outlook tarda en subir el evento: se vuelve a leer el ICS a los 90 s y a los 4 min
-    for segundos in [90u64, 240] {
-        let h = app.clone();
-        thread::spawn(move || {
-            thread::sleep(Duration::from_secs(segundos));
-            crate::calendario::sincronizar(&h);
-        });
+    pendientes::anadir_creacion(&app, evento)?;
+    despertar_cola(&app);
+    Ok(())
+}
+
+/// Borra un evento: desaparece de la agenda al instante y se borra de Outlook ahora si está
+/// abierto, o en cuanto se abra (el ICS no se puede modificar). Rechaza ya mismo las series;
+/// las reuniones con invitados y los eventos que no se encuentran en Outlook se avisan al
+/// intentar el borrado (`pendientes://fallo`) y vuelven a la agenda.
+#[tauri::command]
+pub async fn borrar_evento(app: AppHandle, evento: Evento) -> Result<(), String> {
+    if pendientes::anadir_borrado(&app, &evento)? != pendientes::AccionBorrado::CreacionCancelada {
+        despertar_cola(&app);
     }
     Ok(())
 }
@@ -1369,6 +1621,127 @@ mod pruebas {
         assert_eq!(f.to_string(), "2026-11-19 00:00:00");
         let (_, f) = validar_evento(&evento("Viaje", "2026-11-18", "2026-11-20", true)).unwrap();
         assert_eq!(f.to_string(), "2026-11-21 00:00:00");
+    }
+
+    fn naive(d: u32, h: u32, m: u32) -> NaiveDateTime {
+        NaiveDate::from_ymd_opt(2026, 11, d).unwrap().and_hms_opt(h, m, 0).unwrap()
+    }
+
+    fn ev_agenda(uid: &str, titulo: &str, ini: NaiveDateTime, fin: NaiveDateTime) -> Evento {
+        let desfase = chrono::FixedOffset::east_opt(3600).unwrap();
+        Evento {
+            id: format!("{uid}|x"),
+            uid: uid.into(),
+            titulo: titulo.into(),
+            inicio: desfase.from_local_datetime(&ini).unwrap(),
+            fin: desfase.from_local_datetime(&fin).unwrap(),
+            todo_el_dia: false,
+            ubicacion: None,
+            categorias: vec![],
+            descripcion: None,
+            recurrente: false,
+            pendiente: false,
+        }
+    }
+
+    fn cita(gid: &str, titulo: &str, ini: NaiveDateTime, fin: NaiveDateTime) -> CitaLeida {
+        CitaLeida {
+            global_id: gid.into(),
+            titulo: titulo.into(),
+            inicio: ini,
+            fin,
+            todo_el_dia: false,
+            recurrente: false,
+            es_reunion: false,
+        }
+    }
+
+    #[test]
+    fn borrado_rechaza_series_y_eventos_sin_id() {
+        let mut e = ev_agenda("U1", "Clase", naive(18, 10, 0), naive(18, 11, 0));
+        assert!(validar_borrado(&e).is_ok());
+        e.recurrente = true;
+        assert!(validar_borrado(&e).unwrap_err().contains("recurrente"));
+        e.recurrente = false;
+        e.id = "  ".into();
+        assert!(validar_borrado(&e).is_err());
+    }
+
+    #[test]
+    fn borrado_localiza_por_uid_sin_distinguir_mayusculas() {
+        let e = ev_agenda("0400ABCD", "Tutoría", naive(18, 10, 0), naive(18, 11, 0));
+        let citas = vec![
+            cita("OTRA", "Tutoría", naive(18, 10, 0), naive(18, 11, 0)),
+            cita("0400abcd", "Titulo cambiado", naive(18, 12, 0), naive(18, 13, 0)),
+        ];
+        // El UID manda aunque el título y la hora ya no coincidan
+        assert_eq!(elegir_cita(&e, &citas), Ok(1));
+    }
+
+    #[test]
+    fn borrado_sin_uid_usa_titulo_e_inicio_y_fin() {
+        let e = ev_agenda("sin-coincidencia", "Tutoría", naive(18, 10, 0), naive(18, 11, 0));
+        let citas = vec![
+            cita("A", "Tutoría", naive(18, 10, 0), naive(18, 12, 0)), // otro fin
+            cita("B", "Tutoria", naive(18, 10, 0), naive(18, 11, 0)), // otro título (sin tilde)
+            cita("C", "  tutoría ", naive(18, 10, 0), naive(18, 11, 0)),
+        ];
+        assert_eq!(elegir_cita(&e, &citas), Ok(2));
+        // Una diferencia de segundos (redondeo de las fechas OLE) no impide reconocerlo
+        let mut c = cita("D", "Tutoría", naive(18, 10, 0), naive(18, 11, 0));
+        c.inicio += Dur::seconds(20);
+        assert_eq!(elegir_cita(&e, &[c]), Ok(0));
+    }
+
+    #[test]
+    fn borrado_no_encontrado_o_ambiguo_no_borra_nada() {
+        let e = ev_agenda("U", "Tutoría", naive(18, 10, 0), naive(18, 11, 0));
+        assert!(elegir_cita(&e, &[]).unwrap_err().contains("No se encontró"));
+        assert!(elegir_cita(&e, &[cita("Z", "Otra", naive(18, 10, 0), naive(18, 11, 0))]).is_err());
+        let dos = vec![
+            cita("X", "Tutoría", naive(18, 10, 0), naive(18, 11, 0)),
+            cita("Y", "Tutoría", naive(18, 10, 0), naive(18, 11, 0)),
+        ];
+        assert!(elegir_cita(&e, &dos).unwrap_err().contains("varios"));
+        // Dos citas con el mismo UID tampoco se resuelven a la suerte
+        let mismo_uid = vec![
+            cita("U", "Tutoría", naive(18, 10, 0), naive(18, 11, 0)),
+            cita("u", "Tutoría", naive(18, 10, 0), naive(18, 11, 0)),
+        ];
+        assert!(elegir_cita(&e, &mismo_uid).is_err());
+    }
+
+    #[test]
+    fn borrado_rechaza_series_y_reuniones_aunque_coincidan() {
+        let e = ev_agenda("U", "Tutoría", naive(18, 10, 0), naive(18, 11, 0));
+        let mut serie = cita("U", "Tutoría", naive(18, 10, 0), naive(18, 11, 0));
+        serie.recurrente = true;
+        assert!(elegir_cita(&e, &[serie]).unwrap_err().contains("recurrente"));
+        let mut reunion = cita("U", "Tutoría", naive(18, 10, 0), naive(18, 11, 0));
+        reunion.es_reunion = true;
+        assert!(elegir_cita(&e, &[reunion]).unwrap_err().contains("invitados"));
+    }
+
+    #[test]
+    fn borrado_distingue_dia_completo() {
+        let mut e = ev_agenda("U", "Festivo", naive(18, 0, 0), naive(19, 0, 0));
+        e.todo_el_dia = true;
+        let mut c = cita("Q", "Festivo", naive(18, 0, 0), naive(19, 0, 0));
+        assert!(elegir_cita(&e, &[c.clone()]).is_err()); // la cita no es de día completo
+        c.todo_el_dia = true;
+        assert_eq!(elegir_cita(&e, &[c]), Ok(0));
+    }
+
+    #[test]
+    fn borrado_busca_en_una_ventana_de_un_dia_y_filtro_dasl() {
+        let e = ev_agenda("U", "X", naive(18, 10, 0), naive(18, 11, 0));
+        let (d, h) = ventana_borrado(&e);
+        assert_eq!(d, naive(17, 10, 0));
+        assert_eq!(h, naive(19, 10, 0));
+        assert_eq!(
+            filtro_dasl_citas(d, h),
+            "@SQL=\"urn:schemas:calendar:dtstart\" >= '2026-11-17 10:00' AND \"urn:schemas:calendar:dtstart\" <= '2026-11-19 10:00'"
+        );
     }
 
     #[test]

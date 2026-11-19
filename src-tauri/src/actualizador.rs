@@ -1,23 +1,27 @@
 //! Actualizador automático con `tauri-plugin-updater` contra GitHub Releases.
 //!
-//! Comprueba a los 10 s de arrancar y cada 6 h. Si hay una versión nueva abre la
-//! ventana HUD «aviso» (aviso.html). Estado propio: no toca `estado.rs`.
+//! Comprueba a los 10 s de arrancar, cada hora y al mostrar el panel (si la última
+//! comprobación tiene más de 10 min). Si hay una versión nueva abre la ventana HUD
+//! «aviso» (aviso.html). Estado propio: no toca `estado.rs`.
 
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Listener, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_updater::{Update, UpdaterExt};
 
 const ESPERA_INICIAL: Duration = Duration::from_secs(10);
-const INTERVALO: Duration = Duration::from_secs(6 * 60 * 60);
+const INTERVALO: Duration = Duration::from_secs(60 * 60);
+/// Al mostrar el panel solo se vuelve a comprobar si la última comprobación es más vieja.
+const EDAD_MAX_AL_MOSTRAR: Duration = Duration::from_secs(10 * 60);
 const ETIQUETA: &str = "aviso";
 
 #[derive(Default)]
 pub struct EstadoActualizador {
     pendiente: Mutex<Option<Update>>,
     pospuesta: Mutex<Option<String>>,
+    ultima_comprobacion: Mutex<Option<Instant>>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -46,6 +50,7 @@ fn info(u: &Update) -> InfoActualizacion {
 
 /// Busca una actualización y guarda la encontrada como pendiente.
 async fn comprobar(app: &AppHandle) -> Result<Option<Update>, String> {
+    *app.state::<EstadoActualizador>().ultima_comprobacion.lock().unwrap() = Some(Instant::now());
     let actualizador = app
         .updater()
         .map_err(|e| format!("No se pudo preparar la comprobación: {e}"))?;
@@ -84,24 +89,43 @@ fn abrir_aviso(app: &AppHandle) {
     }
 }
 
+/// Comprobación en segundo plano: si hay versión nueva y no está pospuesta, abre el aviso.
+async fn revisar(app: &AppHandle) {
+    match comprobar(app).await {
+        Ok(Some(u)) => {
+            let pospuesta = app.state::<EstadoActualizador>().pospuesta.lock().unwrap().clone();
+            if pospuesta.as_deref() != Some(u.version.as_str()) {
+                abrir_aviso(app);
+            }
+        }
+        Ok(None) => {}
+        // En segundo plano los fallos (sin red, sin latest.json…) no molestan
+        Err(e) => eprintln!("actualizador: {e}"),
+    }
+}
+
 pub fn iniciar(app: &AppHandle) {
     app.manage(EstadoActualizador::default());
-    let app = app.clone();
+    let h = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio_sleep(ESPERA_INICIAL).await;
         loop {
-            match comprobar(&app).await {
-                Ok(Some(u)) => {
-                    let pospuesta = app.state::<EstadoActualizador>().pospuesta.lock().unwrap().clone();
-                    if pospuesta.as_deref() != Some(u.version.as_str()) {
-                        abrir_aviso(&app);
-                    }
-                }
-                Ok(None) => {}
-                // En segundo plano los fallos (sin red, sin latest.json…) no molestan
-                Err(e) => eprintln!("actualizador: {e}"),
-            }
+            revisar(&h).await;
             tokio_sleep(INTERVALO).await;
+        }
+    });
+    // Al mostrar el panel se vuelve a comprobar si hace más de 10 min de la última vez
+    let h = app.clone();
+    app.listen("panel://mostrar", move |_| {
+        let vieja = h
+            .state::<EstadoActualizador>()
+            .ultima_comprobacion
+            .lock()
+            .unwrap()
+            .map_or(false, |t| t.elapsed() > EDAD_MAX_AL_MOSTRAR);
+        if vieja {
+            let h = h.clone();
+            tauri::async_runtime::spawn(async move { revisar(&h).await });
         }
     });
 }

@@ -1,6 +1,6 @@
 {
   "name": "consumo-mods",
-  "owner": { "name": "Mario" },
+  "owner": { "name": "Kuerb0" },
   "plugins": [
     { "name": "uso-consumo", "source": "./uso-consumo", "description": "Vuelca el consumo semanal y de 5 h de Claude a ~/.claude/statusbar/usage.json para Consumo-App" }
   ]

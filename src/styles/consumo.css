@@ -98,8 +98,7 @@
 /* --- Aviso: bandas diagonales HUD --- */
 .con__aviso { display: flex; flex-direction: column; gap: var(--esp-2); }
 .con__aviso-texto { color: var(--amarillo); font-size: var(--tam-s); white-space: pre-line; user-select: text; }
-.con__aviso-acciones { display: flex; justify-content: flex-end; }
-.con__aviso-acciones:has(> [hidden]) { display: none; }
+.con__aviso-acciones { display: flex; justify-content: flex-end; gap: var(--esp-2); }
 .con__aviso-resultado { font-size: var(--tam-xs); color: var(--cian); white-space: pre-line; user-select: text; }
 
 /* --- Pie --- */

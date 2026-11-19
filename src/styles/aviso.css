@@ -91,3 +91,9 @@ html, body { margin: 0; height: 100%; }
 .aviso__btn--primario { background: var(--primario); color: var(--tinta); border-color: var(--primario); }
 .aviso__btn--primario:hover:not(:disabled) { background: var(--primario); box-shadow: 0 0 10px var(--primario-tenue); }
 .aviso__btn:disabled { opacity: 0.4; cursor: default; }
+
+/* Variante de alerta (aviso-consumo: límite alcanzado): marco, título y botón en rojo */
+.aviso--alerta { background: var(--alerta); }
+.aviso--alerta .aviso__titulo { color: var(--alerta); text-shadow: 0 0 8px var(--alerta-tenue); }
+.aviso--alerta .aviso__notas { background: var(--alerta-suave); border-left-color: var(--alerta-tenue); }
+.aviso--alerta .aviso__btn--primario { background: var(--alerta); border-color: var(--alerta); }

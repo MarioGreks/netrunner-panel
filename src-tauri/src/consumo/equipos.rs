@@ -57,6 +57,34 @@ pub fn carpetas_sync(fichero: &Path, onedrive: &Path) -> Vec<PathBuf> {
     rutas
 }
 
+/// Guarda las carpetas (la principal primero, sin repetir ni vacías) en `fichero`, una por línea.
+/// Lista vacía: borra el fichero (vuelve la carpeta por defecto). True si el contenido cambió.
+pub fn guardar_carpetas(fichero: &Path, carpetas: &[String]) -> io::Result<bool> {
+    let mut rutas: Vec<&str> = Vec::new();
+    for c in carpetas.iter().map(|c| c.trim()).filter(|c| !c.is_empty()) {
+        if !rutas.iter().any(|r| norm(r) == norm(c)) {
+            rutas.push(c);
+        }
+    }
+    let antes = fs::read_to_string(fichero).ok();
+    if rutas.is_empty() {
+        if antes.is_some() {
+            fs::remove_file(fichero)?;
+            return Ok(true);
+        }
+        return Ok(false);
+    }
+    let texto = rutas.join("\n");
+    if antes.as_deref().map(|t| t.trim_start_matches('\u{feff}')) == Some(texto.as_str()) {
+        return Ok(false);
+    }
+    let carpeta = fichero.parent().unwrap_or(Path::new("."));
+    fs::create_dir_all(carpeta)?;
+    let nombre = fichero.file_name().and_then(|n| n.to_str()).unwrap_or("consumo_sync");
+    escribir_atomico(carpeta, nombre, &texto)?;
+    Ok(true)
+}
+
 /// La base de OneDrive por defecto: `%OneDriveConsumer%` o `~/OneDrive`.
 pub fn onedrive_defecto(home: &Path) -> PathBuf {
     std::env::var_os("OneDriveConsumer")
@@ -489,6 +517,29 @@ impl Equipos {
     }
 
     /// Las carpetas de sincronización que existen ahora.
+    /// Todas las carpetas elegidas (existan o no), la principal primero.
+    pub fn lista_sync(&self) -> Vec<PathBuf> {
+        carpetas_sync(&self.fichero, &self.onedrive)
+    }
+
+    /// La carpeta que se usa si no se elige ninguna.
+    pub fn carpeta_defecto(&self) -> PathBuf {
+        self.onedrive.join("Claude-consumo")
+    }
+
+    /// Guarda las carpetas elegidas; True si cambiaron.
+    pub fn guardar_sync(&mut self, carpetas: &[String]) -> io::Result<bool> {
+        guardar_carpetas(&self.fichero, carpetas)
+    }
+
+    /// Olvida lo leído y lo publicado: tras cambiar las carpetas se vuelve a leer y publicar todo.
+    pub fn invalidar(&mut self) {
+        self.cache_consumo = Cache::default();
+        self.cache_detalle = Cache::default();
+        self.pub_consumo = Publicador::default();
+        self.pub_detalle = Publicador::default();
+    }
+
     pub fn activas(&self) -> Vec<PathBuf> {
         carpetas_activas(&carpetas_sync(&self.fichero, &self.onedrive))
     }

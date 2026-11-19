@@ -51,6 +51,18 @@ impl Vigilancia {
     fn statusbar(&self) -> PathBuf {
         self.home.join(".claude").join("statusbar")
     }
+
+    /// Aplica un nuevo máximo de GB a lo ya medido (sin volver a recorrer carpetas).
+    /// Sin medida todavía no hay nada que rehacer.
+    pub fn aplicar_gb_max(&self, gb_max: f64) {
+        let mut d = bloquear(&self.datos);
+        if let Some(gb) = d.gb {
+            let libre = d.libre.map(|l| (l * 1024.0 * 1024.0 * 1024.0) as u64);
+            *d = datos_disco(gb, gb_max, libre);
+        } else {
+            d.gb_max = gb_max;
+        }
+    }
 }
 
 /// Resultado del diagnóstico del plugin.

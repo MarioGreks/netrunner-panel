@@ -327,6 +327,8 @@ export type EventoPanel =
   | "consumo://detalle"
   | "consumo://diagnostico"
   | "consumo://datos"
+  | "consumo://ajustes"
+  | "consumo://aviso"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"
@@ -532,3 +534,35 @@ export const buscarActualizacion = () => invoke<InfoActualizacion | null>("busca
 export const infoActualizacion = () => invoke<InfoActualizacion | null>("info_actualizacion");
 export const instalarActualizacion = () => invoke<void>("instalar_actualizacion");
 export const posponerActualizacion = () => invoke<void>("posponer_actualizacion");
+
+// --- Ajustes de Consumo y aviso del 80 % / 100 % ---
+export type CtxMaxConsumo = 200000 | 500000 | 1000000;
+export interface AjustesConsumo {
+  ctxMax: CtxMaxConsumo;
+  /** Avisos al 80 % y al 100 %. */
+  avisos: boolean;
+  /** Máximo de espacio de datos en GB (0 = sin máximo). */
+  gbMax: number;
+  /** Carpetas de sincronización, la principal primero. */
+  carpetasSync: string[];
+  /** La que se usa si no se elige ninguna (solo al leer). */
+  carpetaDefecto: string;
+}
+export const ajustesConsumo = () => invoke<AjustesConsumo>("ajustes_consumo");
+/** Guarda y aplica sin reiniciar; resuelve con lo que quedó guardado. Rechaza con el texto del fallo. */
+export const guardarAjustesConsumo = (ajustes: AjustesConsumo) =>
+  invoke<AjustesConsumo>("guardar_ajustes_consumo", { ajustes });
+/** Se emite al guardar los ajustes de Consumo. */
+export const alAjustesConsumo = (cb: () => void) => alEvento<null>("consumo://ajustes", () => cb());
+
+export interface AvisoConsumo {
+  titulo: string;
+  texto: string;
+  /** Límite alcanzado (100 %): se pinta en rojo. */
+  alerta: boolean;
+}
+/** Lo que enseña la ventana de aviso de consumo (null si ya se cerró). */
+export const avisoConsumoActual = () => invoke<AvisoConsumo | null>("aviso_consumo_actual");
+export const cerrarAvisoConsumo = () => invoke<void>("cerrar_aviso_consumo");
+/** La ventana de aviso ya abierta recibe un texto nuevo: volver a pedir `avisoConsumoActual()`. */
+export const alAvisoConsumo = (cb: () => void) => alEvento<null>("consumo://aviso", () => cb());

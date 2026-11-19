@@ -25,6 +25,7 @@ import {
   type SesionContexto,
   type VentanaConsumo,
 } from "../../lib/ipc";
+import { abrirAjustes } from "../../lib/navegacion";
 import { alCambiarVisibilidadPanel, panelVisible } from "../../lib/visibilidad";
 import { crearAnillo, type Anillo } from "../../ui/grafica";
 
@@ -91,6 +92,7 @@ export function montar(contenedor: HTMLElement): () => void {
         <div class="banda"></div>
         <p class="con__aviso-texto" data-id="aviso-texto"></p>
         <div class="con__aviso-acciones">
+          <button class="fm__btn" data-id="ajustes" type="button">AJUSTES</button>
           <button class="fm__btn fm__btn--ok" data-id="instalar" hidden>INSTALAR PLUGIN</button>
         </div>
         <p class="con__aviso-resultado" data-id="aviso-resultado" hidden></p>
@@ -123,6 +125,7 @@ export function montar(contenedor: HTMLElement): () => void {
   const avisoTexto = q("aviso-texto");
   const avisoResultado = q("aviso-resultado");
   const botonInstalar = q<HTMLButtonElement>("instalar");
+  q("ajustes").addEventListener("click", () => abrirAjustes("consumo"));
   const botonAbrir = q<HTMLButtonElement>("abrir");
   const datosEl = q("datos");
   const sesionesEl = q("sesiones");

@@ -178,3 +178,7 @@
 .ajs__avanzado[open] > .ajs__avanzado-t { color: var(--cian); }
 .ajs__casilla--primera { margin-top: 0; align-items: flex-start; }
 .ajs__casilla--primera .ajs__marca { margin-top: 2px; }
+
+/* CONSUMO: rutas extra de sincronización en tenue y texto del plugin con saltos de línea */
+.ajs__tenue { opacity: 0.55; }
+.ajs__pre { white-space: pre-line; user-select: text; }

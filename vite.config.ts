@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import { resolve } from "node:path";
 
-// Multipágina: index.html (panel) y tab.html (pestaña de borde).
+// Multipágina: index.html (panel), tab.html (pestaña de borde) y las ventanas de aviso.
 export default defineConfig({
   clearScreen: false,
   // Vite no debe vigilar el Rust: de eso se encarga Tauri (y target/ da EBUSY)
@@ -13,6 +13,7 @@ export default defineConfig({
         panel: resolve(import.meta.dirname, "index.html"),
         tab: resolve(import.meta.dirname, "tab.html"),
         aviso: resolve(import.meta.dirname, "aviso.html"),
+        avisoConsumo: resolve(import.meta.dirname, "aviso-consumo.html"),
       },
     },
   },

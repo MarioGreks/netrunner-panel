@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "aviso-consumo",
+  "description": "Permisos mínimos de la ventana de aviso de consumo (solo eventos)",
+  "windows": ["aviso-consumo"],
+  "permissions": ["core:event:default"]
+}

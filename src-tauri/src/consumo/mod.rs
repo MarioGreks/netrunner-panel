@@ -12,6 +12,8 @@
 //! se lee lo de los demás equipos y se reparte el % semanal (`reparto`, `equipos`). El uso y el
 //! historial del % son los de la cuenta: se fusionan con los de los demás equipos.
 
+pub mod ajustes;
+pub mod aviso;
 pub mod contexto;
 pub mod disco;
 pub mod equipos;
@@ -24,6 +26,8 @@ pub mod vigilancia;
 #[cfg(test)]
 mod pruebas;
 #[cfg(test)]
+mod pruebas_ajustes;
+#[cfg(test)]
 mod pruebas_detalle;
 #[cfg(test)]
 mod pruebas_plugin;
@@ -32,7 +36,7 @@ mod pruebas_reparto;
 
 use std::ffi::OsStr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -41,7 +45,8 @@ use serde::Serialize;
 use sysinfo::{ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager, State};
 
-use contexto::{Contexto, SesionContexto, CTX_MAX};
+use ajustes::Hechos;
+use contexto::{Contexto, SesionContexto};
 use equipos::{cubos_json, cubos_propios, fusionar_hist, fusionar_uso, Equipos};
 use reparto::{calcular_detalle, unir_cubos, CuboEq, DetalleConsumo};
 use transcripciones::{raiz_proyectos, Cubo, Lector, CUBO};
@@ -117,15 +122,24 @@ pub struct Consumo {
     equipos: Mutex<Equipos>,
     /// No escribe nada en disco (la prueba de humo, que es solo de lectura).
     solo_lectura: bool,
+    /// Ventana de contexto con la que se calcula (ajuste del usuario; se lee al arrancar).
+    ctx_max: AtomicU64,
+    /// Avisos del 80 % / 100 % ya dados.
+    hechos: Mutex<Hechos>,
 }
 
 impl Consumo {
     fn nuevo(carpeta: Option<PathBuf>, equipos: Equipos) -> Consumo {
+        let ctx_max = carpeta.as_ref().map_or(contexto::CTX_MAX, |d| {
+            ajustes::leer_ajustes(&d.join(ajustes::FICHERO_AJUSTES)).0
+        });
         Consumo {
             interno: Mutex::new(Interno::default()),
             carpeta,
             equipos: Mutex::new(equipos),
             solo_lectura: false,
+            ctx_max: AtomicU64::new(ctx_max),
+            hechos: Mutex::new(Hechos::default()),
         }
     }
 }
@@ -238,12 +252,41 @@ fn refrescar(c: &Consumo, mut proceso: impl FnMut() -> bool) -> bool {
     true
 }
 
-/// Lee usage.json si cambió su fecha (o lo de otros equipos) y avisa a la interfaz.
+/// Lee usage.json si cambió su fecha (o lo de otros equipos) y avisa a la interfaz. Cuando hubo
+/// cambios, mira si hay que dar un aviso del 80 % / 100 %.
 fn vuelta(app: &AppHandle, c: &Consumo) {
     if refrescar(c, consumo_en_marcha) {
         let _ = app.emit("consumo://estado", calcular_ahora(c));
+        avisar(app, c);
     }
 }
+
+/// Avisos del 80 % y del 100 % con el uso fusionado. Con Consumo.exe abierto no se hace nada
+/// (avisa él); los avisos desactivados se dan por hechos sin mostrar.
+fn avisar(app: &AppHandle, c: &Consumo) {
+    let Some(carpeta) = c.carpeta.as_ref() else {
+        return;
+    };
+    if c.solo_lectura {
+        return;
+    }
+    let uso = bloquear(&c.interno).uso.clone();
+    let activos = ajustes::leer_ajustes(&carpeta.join(ajustes::FICHERO_AJUSTES)).1;
+    let nuevos = ajustes::procesar_avisos(
+        &mut bloquear(&c.hechos),
+        &carpeta.join(ajustes::FICHERO_AVISOS),
+        &uso,
+        ahora_s(),
+        activos,
+        || !consumo_en_marcha(),
+    );
+    if !nuevos.is_empty() {
+        let limite = nuevos.iter().any(|a| a.claves.iter().any(|k| k.2 >= 100));
+        let texto = nuevos.iter().map(|a| a.texto.as_str()).collect::<Vec<_>>().join("\n\n");
+        aviso::mostrar(app, limite, &texto);
+    }
+}
+
 
 /// Registra el estado y arranca el hilo muestreador.
 pub fn iniciar(app: &AppHandle) {
@@ -259,6 +302,7 @@ pub fn iniciar(app: &AppHandle) {
         Equipos::real(&carpeta, &home),
     ));
     app.manage(Detalle::nuevo());
+    app.manage(aviso::AvisoConsumo::default());
     app.manage(vigilancia::Vigilancia::nuevo(home));
     let app = app.clone();
     let a = app.clone();
@@ -275,9 +319,6 @@ pub fn iniciar(app: &AppHandle) {
 
 // --- Detalle por transcripciones y contexto por sesión ---
 
-/// Ventana de contexto con la que se calcula. El ajuste del usuario vendrá en otro encargo:
-/// cambiar solo esto.
-const CTX_MAX_ACTUAL: u64 = CTX_MAX;
 /// Cada cuánto se recalcula el contexto mientras la vista está a la vista.
 const CADA_CONTEXTO: Duration = Duration::from_secs(5);
 /// Primera lectura de transcripciones tras arrancar.
@@ -369,7 +410,8 @@ pub fn vista_consumo(visible: bool, detalle: State<'_, Detalle>) {
 
 /// Recalcula el contexto, lo guarda y, si cambió (o `siempre`), avisa a la interfaz.
 fn recalcular_contexto(app: &AppHandle, d: &Detalle, siempre: bool) {
-    let lista = bloquear(&d.contexto).calcular(ahora_s(), CTX_MAX_ACTUAL);
+    let ctx_max = app.state::<Consumo>().ctx_max.load(Ordering::SeqCst);
+    let lista = bloquear(&d.contexto).calcular(ahora_s(), ctx_max);
     {
         let g = bloquear(&d.contexto);
         let mut chats = bloquear(&d.chats);

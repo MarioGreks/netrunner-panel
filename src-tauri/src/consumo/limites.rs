@@ -568,7 +568,6 @@ pub struct Aviso {
 
 /// Avisos de las ventanas que han llegado a un umbral del que aún no se avisó en esa ventana.
 /// Si se cruzan dos a la vez solo se avisa del mayor. `hechos` son las claves ya avisadas.
-#[allow(dead_code)] // el aviso visual es de otro encargo
 pub fn avisos_nuevos(uso: &Uso, hechos: &HashSet<ClaveAviso>, ahora: f64) -> Vec<Aviso> {
     let ventanas = [
         ("sevenDay", "Semanal", SEMANA, uso.semanal.as_ref()),

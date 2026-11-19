@@ -514,6 +514,9 @@ export const datosConsumo = () => invoke<DatosDisco>("datos_consumo");
 /** Se emite una vez por arranque al pasar del máximo de GB. */
 export const alDatosConsumo = (cb: (d: DatosDisco) => void) => alEvento<DatosDisco>("consumo://datos", cb);
 
+/** Ventana flotante con la información completa de Consumo (encargo 6): el comando aún no existe en Rust. */
+export const abrirVentanaConsumo = () => invoke<void>("abrir_ventana_consumo");
+
 // --- Actualizador ---
 export interface InfoActualizacion {
   version: string;

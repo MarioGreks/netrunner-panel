@@ -54,6 +54,7 @@
   font-size: 18px;
   fill: var(--texto);
 }
+.anillo__marca { stroke: var(--texto); stroke-width: 2; stroke-linecap: butt; }
 .anillo--nd .anillo__valor { font-size: 14px; fill: var(--texto-tenue); }
 
 /* GPU sin datos: atenuada */

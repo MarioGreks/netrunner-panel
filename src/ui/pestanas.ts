@@ -1,17 +1,18 @@
 // Pestañas bajo la cabecera, estilo carpeta: la activa es un bloque macizo con la esquina cortada
-// que se desliza bajo el texto. Teclas 1-5 cambian de pestaña.
+// que se desliza bajo el texto. Teclas 1-6 cambian de pestaña.
 export interface Pestana {
   id: string;
   nombre: string;
 }
 
 export const PESTANAS: Pestana[] = [
-  // Orden: tiempo/meteo, correo, accesos, notas, sistema (teclas 1-5 en este orden)
+  // Orden: tiempo/meteo, correo, accesos, notas, sistema, consumo (teclas 1-6 en este orden)
   { id: "tiempo", nombre: "METEO" },
   { id: "correo", nombre: "CORREO" },
   { id: "accesos", nombre: "ACCESOS" },
   { id: "notas", nombre: "NOTAS" },
   { id: "sistema", nombre: "SISTEMA" },
+  { id: "consumo", nombre: "CONSUMO" },
 ];
 
 const botonesPorId = new Map<string, HTMLButtonElement>();

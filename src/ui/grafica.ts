@@ -166,8 +166,14 @@ export interface OpcionesAnillo {
 }
 
 export interface Anillo {
-  /** Fija el valor 0..100; null muestra "N/D" atenuado */
-  fijar(valor: number | null): void;
+  /** Fija el valor 0..100; null muestra "N/D" atenuado. `inmediato` salta la animación de relleno. */
+  fijar(valor: number | null, inmediato?: boolean): void;
+  /** Marca fina en el anillo (p. ej. el % esperado); null la quita. */
+  marca(valor: number | null): void;
+  /** Tramo tenue desde el valor actual hasta `hasta` (p. ej. el % estimado); null lo quita. */
+  tramo(hasta: number | null): void;
+  /** Cambia el color de los segmentos (admite var(--x)). */
+  colorAnillo(color: string): void;
   /** Cambia el color del valor central (p. ej. rojo por encima del umbral) */
   colorValor(color: string | null): void;
   destruir(): void;
@@ -205,6 +211,12 @@ export function crearAnillo(contenedor: HTMLElement, opciones: OpcionesAnillo): 
     segmentos.push(el);
   }
 
+  // Marca fina radial (opcional), sobresale un poco del anillo
+  const marcaEl = document.createElementNS(NS, "line");
+  marcaEl.setAttribute("class", "anillo__marca");
+  marcaEl.setAttribute("display", "none");
+  svg.appendChild(marcaEl);
+
   const texto = document.createElementNS(NS, "text");
   texto.setAttribute("x", String(c));
   texto.setAttribute("y", String(c));
@@ -218,13 +230,16 @@ export function crearAnillo(contenedor: HTMLElement, opciones: OpcionesAnillo): 
   let objetivo = 0;
   let raf = 0;
   let sinDato = false;
+  let hastaTramo: number | null = null;
 
   const pintar = () => {
     const encendidos = (actual / 100) * n;
+    const tramoFin = hastaTramo === null ? 0 : (Math.min(100, hastaTramo) / 100) * n;
     segmentos.forEach((s, i) => {
       // El segmento parcial se enciende con opacidad proporcional
       const f = Math.min(1, Math.max(0, encendidos - i));
-      s.style.opacity = String(0.14 + f * 0.86);
+      const t = f === 0 ? Math.min(1, Math.max(0, tramoFin - i)) : 0;
+      s.style.opacity = String(t > 0 ? 0.14 + t * 0.26 : 0.14 + f * 0.86);
       s.classList.toggle("anillo__seg--on", f > 0);
     });
     texto.textContent = sinDato ? "N/D" : `${Math.round(actual)}%`;
@@ -245,11 +260,38 @@ export function crearAnillo(contenedor: HTMLElement, opciones: OpcionesAnillo): 
   pintar();
 
   return {
-    fijar(valor) {
+    fijar(valor, inmediato = false) {
       sinDato = valor === null;
       objetivo = valor === null ? 0 : Math.min(100, Math.max(0, valor));
       svg.classList.toggle("anillo--nd", sinDato);
-      if (!raf) raf = requestAnimationFrame(paso);
+      if (inmediato) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+        actual = objetivo;
+        pintar();
+      } else if (!raf) raf = requestAnimationFrame(paso);
+    },
+    marca(valor) {
+      if (valor === null) {
+        marcaEl.setAttribute("display", "none");
+        return;
+      }
+      const a = -Math.PI / 2 + (Math.min(100, Math.max(0, valor)) / 100) * Math.PI * 2;
+      const p = (r: number) => [(c + r * Math.cos(a)).toFixed(2), (c + r * Math.sin(a)).toFixed(2)];
+      const [x1, y1] = p(rInt - 3);
+      const [x2, y2] = p(rExt + 2);
+      marcaEl.setAttribute("x1", x1);
+      marcaEl.setAttribute("y1", y1);
+      marcaEl.setAttribute("x2", x2);
+      marcaEl.setAttribute("y2", y2);
+      marcaEl.removeAttribute("display");
+    },
+    tramo(hasta) {
+      hastaTramo = hasta;
+      pintar();
+    },
+    colorAnillo(color) {
+      svg.style.setProperty("--color-anillo", color);
     },
     colorValor(color) {
       if (color) texto.style.fill = color;

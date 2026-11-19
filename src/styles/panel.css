@@ -133,7 +133,7 @@ html[data-borde="top"] .cuerpo { border-bottom: 1px solid var(--primario); box-s
   flex: none;
   display: flex;
   justify-content: space-between;
-  padding: var(--esp-2) var(--esp-4) 0;
+  padding: var(--esp-2) var(--esp-2) 0; /* 6 pestañas: márgenes laterales más estrechos para caber en 420 px */
   border-bottom: 1px solid var(--amarillo);
 }
 .pestanas__indicador {
@@ -156,17 +156,17 @@ html[data-borde="top"] .cuerpo { border-bottom: 1px solid var(--primario); box-s
   display: flex;
   align-items: baseline;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   height: 26px;
-  padding: 0 5px;
+  padding: 0 4px;
   background: none;
   border: none;
   align-self: flex-end;
   color: var(--texto-tenue);
   font-family: var(--fuente-titulo);
   font-weight: 700;
-  font-size: var(--tam-xs);
-  letter-spacing: 0.1em;
+  font-size: 9px;
+  letter-spacing: 0.06em;
   line-height: 26px;
   text-transform: uppercase;
   cursor: pointer;

@@ -1,0 +1,109 @@
+/* Módulo CONSUMO. Todo con tokens (los temas cambian la paleta); sin animaciones en bucle. */
+.con { display: flex; flex-direction: column; gap: var(--esp-4); }
+.con [hidden] { display: none; }
+
+/* --- Límites: dos anillos --- */
+.con__limites { display: grid; grid-template-columns: 1.25fr 1fr; gap: var(--esp-3); align-items: start; }
+.con__limite { display: flex; flex-direction: column; align-items: center; gap: var(--esp-1); min-width: 0; text-align: center; }
+.con__sub {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+.con__anillo { display: flex; margin: var(--esp-1) 0; }
+.con__exceso {
+  padding: 0 var(--esp-2);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.1em;
+  color: var(--rojo);
+  background: var(--alerta-suave);
+  border: 1px solid var(--alerta-tenue);
+}
+.con__ritmo { font-size: var(--tam-xs); color: var(--cian); min-height: 1.2em; }
+.con__ritmo--encima { color: var(--amarillo); }
+.con__ritmo--riesgo { color: var(--rojo); }
+.con__semana { font-size: var(--tam-xs); color: var(--texto-tenue); }
+.con__falta {
+  margin-top: var(--esp-1);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.12em;
+  color: var(--texto-tenue);
+}
+.con__falta b { font-family: var(--fuente-datos); font-weight: 700; color: var(--texto); letter-spacing: 0; }
+
+/* --- Contexto: pastillas verticales, cinco por fila --- */
+.con__sesiones { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--esp-3) var(--esp-2); }
+.con__vacio { text-align: center; padding: var(--esp-3) 0; font-size: var(--tam-s); }
+.ctx {
+  --color-ctx: var(--cian);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--texto);
+  font-family: var(--fuente-datos);
+  cursor: default;
+}
+.ctx--chat { cursor: pointer; }
+.ctx--chat:hover .ctx__barra { border-color: var(--color-ctx); }
+.ctx--medio { --color-ctx: var(--amarillo); }
+.ctx--alto { --color-ctx: var(--rojo); }
+.ctx__barra {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  width: 22px;
+  height: 56px;
+  background: var(--velo);
+  border: 1px solid var(--linea-neutra);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+.ctx__relleno {
+  display: block;
+  width: 100%;
+  height: 0;
+  background: var(--color-ctx);
+}
+/* Rayitas al 50 % y 80 % del contexto */
+.ctx__barra::before,
+.ctx__barra::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 6px;
+  height: 1px;
+  background: var(--texto);
+  opacity: 0.55;
+}
+.ctx__barra::before { bottom: 50%; }
+.ctx__barra::after { bottom: 80%; }
+.ctx__nombre {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.ctx__tokens { font-size: 9px; color: var(--texto-tenue); }
+
+/* --- Aviso: bandas diagonales HUD --- */
+.con__aviso { display: flex; flex-direction: column; gap: var(--esp-2); }
+.con__aviso-texto { color: var(--amarillo); font-size: var(--tam-s); white-space: pre-line; user-select: text; }
+.con__aviso-acciones { display: flex; justify-content: flex-end; }
+.con__aviso-acciones:has(> [hidden]) { display: none; }
+.con__aviso-resultado { font-size: var(--tam-xs); color: var(--cian); white-space: pre-line; user-select: text; }
+
+/* --- Pie --- */
+.con__pie { display: flex; align-items: center; justify-content: space-between; gap: var(--esp-3); }
+.con__datos { margin-left: auto; font-size: var(--tam-xs); color: var(--texto-tenue); }
+.con__datos--aviso { color: var(--amarillo); }
+.con__datos--lleno { color: var(--rojo); }

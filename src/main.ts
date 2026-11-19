@@ -8,10 +8,12 @@ import "./styles/notas.css";
 import "./styles/accesos.css";
 import "./styles/correo.css";
 import "./styles/formularios.css";
+import "./styles/consumo.css";
 import "./styles/ajustes.css";
 import { alEvento, estadoCorreo, obtenerConfig, ocultarPanel, type Borde, type EstadoCorreo } from "./lib/ipc";
 import { iniciarTema } from "./lib/tema";
 import { bloqueo } from "./lib/bloqueo";
+import { fijarPanelVisible } from "./lib/visibilidad";
 import { cargarInterfaz, recordarPestana } from "./lib/interfaz";
 import { alAbrirAjustes, pedirIrAEvento, type SeccionAjustes } from "./lib/navegacion";
 import { fijarContador, montarPestanas } from "./ui/pestanas";
@@ -23,14 +25,19 @@ import { montar as montarTiempo } from "./modulos/tiempo/vista";
 import { montar as montarNotas } from "./modulos/notas/vista";
 import { montar as montarAccesos } from "./modulos/accesos/vista";
 import { montar as montarCorreo } from "./modulos/correo/vista";
+import { montar as montarConsumo } from "./modulos/consumo/vista";
 import { montar as montarAjustes } from "./modulos/ajustes/vista";
 
-const MODULOS: Record<string, (c: HTMLElement) => void> = {
+/** Un módulo puede devolver una función de limpieza (timers, listeners) que se llama al cambiar de pestaña. */
+type Modulo = (c: HTMLElement) => void | (() => void);
+
+const MODULOS: Record<string, Modulo> = {
   sistema: montarSistema,
   tiempo: montarTiempo,
   correo: montarCorreo,
   notas: montarNotas,
   accesos: montarAccesos,
+  consumo: montarConsumo,
 };
 
 iniciarTema();
@@ -66,8 +73,14 @@ getVersion()
 // --- Vistas: un módulo de la barra o la pantalla AJUSTES ---
 let idActual = "sistema";
 let cerrarAjustes: (() => void) | null = null;
+let limpiarModulo: (() => void) | null = null;
 // La pestaña inicial (restaurada del estado guardado) no cuenta como un cambio del usuario
 let pestanaInicialLista = false;
+
+const soltarModulo = () => {
+  limpiarModulo?.();
+  limpiarModulo = null;
+};
 
 const salirDeAjustes = () => {
   cerrarAjustes?.();
@@ -78,16 +91,18 @@ const salirDeAjustes = () => {
 
 const activar = montarPestanas(barra, (id) => {
   salirDeAjustes();
+  soltarModulo();
   idActual = id;
   if (pestanaInicialLista) recordarPestana(id);
   contenido.replaceChildren();
-  MODULOS[id](contenido);
+  limpiarModulo = MODULOS[id](contenido) || null;
 });
 
 montarResumen(document.getElementById("resumen")!, (id) => activar(id));
 
 const abrirVistaAjustes = (seccion?: SeccionAjustes) => {
   salirDeAjustes();
+  soltarModulo();
   contenido.replaceChildren();
   barra.classList.add("pestanas--ajustes");
   botonAjustes.classList.add("cabecera__ajustes--activo");
@@ -120,6 +135,7 @@ const iniciarEntrada = () => {
 };
 
 alEvento("panel://mostrar", () => {
+  fijarPanelVisible(true);
   clearTimeout(temporizadorSalida);
   // Si estaba saliendo (el cursor volvió durante el cierre), el panel vuelve a verse
   // sin repetir el parpadeo de entrada.
@@ -143,6 +159,7 @@ alEvento("panel://mostrar", () => {
 
 alEvento("panel://ocultar", () => {
   if (bloqueo.dialogoAbierto) return; // selector de carpetas abierto
+  fijarPanelVisible(false);
   clearTimeout(temporizadorEntrada);
   clearTimeout(temporizadorVuelta);
   panel.classList.remove("entrando", "vuelve", "oculto");

@@ -31,6 +31,13 @@ Está hecho con Tauri 2, Rust y TypeScript sin framework.
 **SISTEMA**
 - CPU, RAM, GPU, discos y batería.
 
+**CONSUMO** (integración de [Consumo](https://github.com/Kuerb0), de Kuerb0)
+- Consumo de Claude: anillos del límite semanal y de la ventana de 5 h con el ritmo esperado, la estimación del día y el aviso si te vas a quedar sin límite.
+- Contexto de cada sesión viva de Claude Code; un clic abre su chat en la app de Claude.
+- Ventana flotante con los apartados Resumen, Ritmo, Días, Proyectos, Equipos, Uso e Histórico, informes HTML (semana, mes, año, histórico total) y guía (F1).
+- Reparto estimado del % por proyecto, sesión, modelo y tarea, suma de varios equipos por una carpeta de OneDrive y archivo semanal que conserva el histórico.
+- Instala y vigila el plugin `uso-consumo` de Claude Code, que es el que escribe los límites. Avisos al 80 % y al 100 %.
+
 **AJUSTES**
 - 6 temas de color y control de la transparencia del panel.
 - Opcional y avanzado: conexión directa de cuentas Microsoft (Microsoft Graph) mediante OAuth 2.0 con PKCE.
@@ -65,6 +72,7 @@ Los datos personales no salen de tu equipo salvo para hablar con los servicios q
 - La configuración (incluida la URL ICS), las notas, los accesos, las cuentas atrás y las últimas copias del tiempo y de la agenda se guardan solo en tu carpeta de datos de la aplicación, en AppData. Desde AJUSTES puedes abrir esa carpeta.
 - Si sincronizas las notas, se copian además en la carpeta de OneDrive que elijas.
 - Si usas la conexión con Microsoft Graph, los tokens se guardan en el Administrador de credenciales de Windows, nunca en archivos de configuración.
+- CONSUMO lee en local tus límites (`~/.claude/statusbar`) y las transcripciones de Claude Code (`~/.claude/projects`); de ellas solo saca tokens, modelo, proyecto y tipo de tarea, nunca el texto. Si eliges una carpeta de sincronización, publica ahí ese resumen por equipo y el archivo semanal.
 
 **Servicios externos**
 - Open-Meteo y su geocodificación: el tiempo y la búsqueda de ciudad. No requiere clave. Se envían las coordenadas o el texto de la ciudad que buscas.
@@ -115,13 +123,15 @@ gh release create v<versión> release/Netrunner-Panel-Setup.exe release/latest.j
 
 ```
 index.html, tab.html   ventanas del panel y de la miniventana
+consumo.html           ventana flotante de CONSUMO (y aviso-consumo.html, sus avisos)
 src/                   interfaz en TypeScript y CSS
   lib/                 IPC con Rust, temas, categorías, navegación
-  modulos/             una vista por pestaña (tiempo, correo, accesos, notas, sistema, ajustes)
+  modulos/             una vista por pestaña (tiempo, correo, accesos, notas, sistema, consumo, ajustes)
   styles/              estilos y temas de color
   ui/                  componentes comunes (pestañas, formularios, gráfica, resumen)
 src-tauri/             núcleo en Rust
-  src/                 un módulo por función (calendario, outlook, meteo, notas, accesos, musica, sistema, microsoft, ventanas, bandeja, config…)
+  src/                 un módulo por función (calendario, outlook, meteo, notas, accesos, musica, sistema, consumo, microsoft, ventanas, bandeja, config…)
+  recursos/consumo-mod plugin uso-consumo de Claude Code, incrustado en el ejecutable
   tauri.conf.json      configuración de Tauri y del instalador
   icons/               iconos de la aplicación
 public/                recursos estáticos

@@ -15,7 +15,7 @@ import { iniciarTema } from "./lib/tema";
 import { bloqueo } from "./lib/bloqueo";
 import { fijarPanelVisible } from "./lib/visibilidad";
 import { cargarInterfaz, recordarPestana } from "./lib/interfaz";
-import { alAbrirAjustes, pedirIrAEvento, type SeccionAjustes } from "./lib/navegacion";
+import { alAbrirAjustes, esSeccionAjustes, pedirIrAEvento, type SeccionAjustes } from "./lib/navegacion";
 import { fijarContador, montarPestanas } from "./ui/pestanas";
 import { montarEnlace } from "./ui/enlace";
 import { montarResumen } from "./ui/resumen";
@@ -177,7 +177,8 @@ alEvento("panel://ocultar", () => {
   );
 });
 
-alEvento("panel://ajustes", () => abrirVistaAjustes());
+// Sin carga (bandeja) abre AJUSTES; con una sección («consumo», desde la ventana de CONSUMO), desplazado a ella
+alEvento<string | null>("panel://ajustes", (seccion) => abrirVistaAjustes(esSeccionAjustes(seccion) ? seccion : undefined));
 
 // La miniventana pide ir a un evento: pestaña METEO (saliendo de AJUSTES si hace falta) y scroll hasta él
 alEvento<string>("panel://ir_evento", (id) => {

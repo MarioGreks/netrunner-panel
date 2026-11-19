@@ -178,7 +178,11 @@ export function montarEquipos(raiz: HTMLElement, e: Entorno): Apartado {
   const m = marco("CONSUMO POR EQUIPO", "SEMANA ACTUAL", "QUIÉN HA GASTADO QUÉ; EN AMARILLO, EL EQUIPO PARADO MÁS DE DOS DÍAS", "marco--cian");
   col.appendChild(m.m);
   const lista = el("div", "rp__lista");
-  const nota = el("p", "rp__nota", "SOLO ESTE EQUIPO · CONFIGURA LA CARPETA DE SINCRONIZACIÓN EN AJUSTES → CONSUMO");
+  const nota = el("p", "rp__nota", "SOLO ESTE EQUIPO · CONFIGURA LA CARPETA DE SINCRONIZACIÓN EN ");
+  const enlace = el("button", "rp__enlace", "AJUSTES → CONSUMO");
+  enlace.type = "button";
+  enlace.addEventListener("click", () => e.abrirAjustes());
+  nota.appendChild(enlace);
   nota.hidden = true;
   m.cuerpo.append(lista, nota);
   let horas: { el: HTMLElement; ultima: number }[] = [];
@@ -219,15 +223,19 @@ export function montarEquipos(raiz: HTMLElement, e: Entorno): Apartado {
     const t = temaGrafica();
     const total = d.equipos.reduce((s, x) => s + x.pct, 0);
     const mx = Math.max(...d.equipos.map((x) => x.pct), 0.0001);
+    const propio = e.datos.equipo.toLowerCase();
     d.equipos.forEach((q, i) => {
       const otros = q.nombre === OTROS;
+      const esteEquipo = !otros && propio !== "" && q.nombre.toLowerCase() === propio;
       const color = otros ? t.otros : i % 2 === 0 ? t.cian : t.amarillo;
       let hace: HTMLElement | undefined;
       if (!otros && q.ultima) {
         hace = el("span", "rp__hace");
         horas.push({ el: hace, ultima: q.ultima });
       }
-      lista.appendChild(fila(nombreVisible(q.nombre), q.nombre, fmtPct(sobreTotal(q.pct, total)), (q.pct / mx) * 100, [[1, color]], otros, hace));
+      const f = fila(esteEquipo ? `${q.nombre} (ESTE)` : nombreVisible(q.nombre), q.nombre, fmtPct(sobreTotal(q.pct, total)), (q.pct / mx) * 100, [[1, color]], otros, hace);
+      if (esteEquipo) f.classList.add("rp__fila--propio");
+      lista.appendChild(f);
     });
     pintarHace();
     nota.hidden = d.equipos.filter((q) => q.nombre !== OTROS).length > 1;

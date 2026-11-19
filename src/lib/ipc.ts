@@ -616,6 +616,11 @@ export interface HistoricoConsumo {
 /** El histórico para dibujar. Se calcula solo al pedirlo (en otro hilo, con los ficheros en caché): no llamar en bucle. */
 export const historicoConsumo = (vista: VistaHistoricoPedida = {}) =>
   invoke<HistoricoConsumo>("historico_consumo", { vista });
+/** La vista del Histórico que se recuerda (la de la primera vez si no hay nada guardado). */
+export const vistaHistorico = () => invoke<VistaHistorico>("vista_historico");
+/** Recuerda la vista del Histórico; el núcleo solo escribe si algo cambia. Devuelve la vista ya saneada. */
+export const guardarVistaHistorico = (vista: VistaHistoricoPedida) =>
+  invoke<VistaHistorico>("guardar_vista_historico_consumo", { vista });
 export interface EquipoSemanaConsumo {
   nombre: string;
   pct: number;
@@ -684,6 +689,10 @@ export const alDatosConsumo = (cb: (d: DatosDisco) => void) => alEvento<DatosDis
 
 /** Abre la ventana flotante con la información completa de Consumo (si ya está abierta, la trae al frente). */
 export const abrirVentanaConsumo = () => invoke<void>("abrir_ventana_consumo");
+/** El nombre de este equipo (el de sus ficheros), para marcarlo entre los de EQUIPOS. */
+export const equipoConsumo = () => invoke<string>("equipo_consumo");
+/** Abre el panel en AJUSTES → CONSUMO (como una apertura manual). */
+export const abrirAjustesConsumo = () => invoke<void>("abrir_ajustes_consumo");
 
 // --- Actualizador ---
 export interface InfoActualizacion {

@@ -19,6 +19,7 @@ use tauri::{AppHandle, Emitter, State};
 use super::contexto::CTX_MAX;
 use super::equipos::escribir_atomico;
 use super::historico::PRECIO_EUR;
+use super::historico_vista::{limpiar_vista_historico, VistaHist};
 use super::limites::{avisos_nuevos, renovar_ventanas, Aviso, ClaveAviso, Uso};
 use super::vigilancia::Vigilancia;
 use super::{bloquear, vuelta, Consumo};
@@ -96,6 +97,45 @@ pub fn guardar_ajustes(fichero: &Path, ctx_max: u64, avisos: bool, gb_max: f64) 
     if existe && mapa == antes {
         return Ok(false);
     }
+    let carpeta = fichero.parent().unwrap_or(Path::new("."));
+    fs::create_dir_all(carpeta)?;
+    let nombre = fichero.file_name().and_then(|n| n.to_str()).unwrap_or(FICHERO_AJUSTES);
+    escribir_atomico(carpeta, nombre, &Value::Object(mapa).to_string())?;
+    Ok(true)
+}
+
+/// El ajuste `historico_vista` (lo último que se vio en el Histórico), limpio y completo; sin
+/// fichero o roto vale lo de la primera vez.
+pub fn leer_vista_historico(fichero: &Path) -> VistaHist {
+    limpiar_vista_historico(leer_json(fichero).get("historico_vista").unwrap_or(&Value::Null))
+}
+
+/// Guarda la vista del Histórico en la clave `historico_vista`: lo que llega se mezcla sobre lo
+/// guardado (así se conservan las casillas, la geometría... de Consumo), se sanea y solo se
+/// escribe, de forma atómica, si cambia algo. Las demás claves del fichero no se tocan. Un fichero
+/// que existe pero no es un objeto JSON no se toca.
+pub fn guardar_vista_historico(fichero: &Path, vista: &Value) -> io::Result<bool> {
+    let existe = fichero.exists();
+    let mut mapa = match leer_json(fichero) {
+        Value::Object(m) => m,
+        Value::Null if !existe => Map::new(),
+        _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "consumo_ajustes.json no es válido")),
+    };
+    let actual = limpiar_vista_historico(mapa.get("historico_vista").unwrap_or(&Value::Null));
+    let mut mezcla = match mapa.get("historico_vista") {
+        Some(Value::Object(m)) => m.clone(),
+        _ => Map::new(),
+    };
+    if let Value::Object(nuevo) = vista {
+        for (k, v) in nuevo {
+            mezcla.insert(k.clone(), v.clone());
+        }
+    }
+    let limpia = limpiar_vista_historico(&Value::Object(mezcla));
+    if existe && limpia == actual && mapa.contains_key("historico_vista") {
+        return Ok(false);
+    }
+    mapa.insert("historico_vista".into(), serde_json::to_value(&limpia).map_err(io::Error::other)?);
     let carpeta = fichero.parent().unwrap_or(Path::new("."));
     fs::create_dir_all(carpeta)?;
     let nombre = fichero.file_name().and_then(|n| n.to_str()).unwrap_or(FICHERO_AJUSTES);
@@ -235,4 +275,19 @@ pub fn guardar_ajustes_consumo(
     }
     let _ = app.emit("consumo://ajustes", ());
     Ok(leer_todo(&c))
+}
+
+/// La vista del Histórico que se recuerda (la de la primera vez si no hay nada guardado).
+#[tauri::command]
+pub fn vista_historico(c: State<'_, Consumo>) -> VistaHist {
+    ruta_ajustes(&c).map_or_else(|| limpiar_vista_historico(&Value::Null), |r| leer_vista_historico(&r))
+}
+
+/// Recuerda la vista del Histórico (periodo, grupo, unidad, modo, paso...): solo escribe si cambia.
+/// Devuelve la vista ya saneada.
+#[tauri::command]
+pub fn guardar_vista_historico_consumo(vista: Value, c: State<'_, Consumo>) -> Result<VistaHist, String> {
+    let ruta = ruta_ajustes(&c).ok_or("Sin carpeta de ajustes")?;
+    guardar_vista_historico(&ruta, &vista).map_err(|e| format!("No se pudo guardar la vista: {e}"))?;
+    Ok(leer_vista_historico(&ruta))
 }

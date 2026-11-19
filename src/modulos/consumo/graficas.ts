@@ -67,7 +67,7 @@ export function crearLienzo(canvas: HTMLCanvasElement, dibujar: Dibujo, activo: 
 }
 
 // --- Utilidades ---
-const fuente = (px: number, negrita = false) => `${negrita ? "700 " : ""}${px}px "JetBrains Mono", monospace`;
+export const fuente = (px: number, negrita = false) => `${negrita ? "700 " : ""}${px}px "JetBrains Mono", monospace`;
 
 const fechaLocal = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -85,7 +85,7 @@ function sinDatos(c: CanvasRenderingContext2D, t: TemaGrafica, texto = "SIN DATO
   c.fillText(texto, 8, 20);
 }
 
-function lineaH(c: CanvasRenderingContext2D, x0: number, x1: number, y: number, color: string) {
+export function lineaH(c: CanvasRenderingContext2D, x0: number, x1: number, y: number, color: string) {
   c.strokeStyle = color;
   c.lineWidth = 1;
   c.beginPath();
@@ -94,7 +94,7 @@ function lineaH(c: CanvasRenderingContext2D, x0: number, x1: number, y: number, 
   c.stroke();
 }
 
-function lineaV(c: CanvasRenderingContext2D, x: number, y0: number, y1: number, color: string) {
+export function lineaV(c: CanvasRenderingContext2D, x: number, y0: number, y1: number, color: string) {
   c.strokeStyle = color;
   c.lineWidth = 1;
   c.beginPath();

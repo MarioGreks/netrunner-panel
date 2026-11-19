@@ -17,6 +17,8 @@ import "./styles/consumo-ventana.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { iniciarTema } from "./lib/tema";
 import {
+  abrirAjustesConsumo,
+  alArchivoConsumo,
   alContextoConsumo,
   alDatosConsumo,
   alDetalleConsumo,
@@ -27,6 +29,7 @@ import {
   datosConsumo,
   detalleConsumo,
   diagnosticoConsumo,
+  equipoConsumo,
   estadoConsumo,
   serieConsumo,
   vistaConsumo,
@@ -41,7 +44,7 @@ const main = q("main");
 const nav = q("nav");
 const datosEl = q("datos");
 
-const datos: Datos = { estado: null, recibidoEn: 0, serie: null, detalle: null, sesiones: [], diag: null, disco: null };
+const datos: Datos = { estado: null, recibidoEn: 0, serie: null, detalle: null, sesiones: [], diag: null, disco: null, equipo: "" };
 const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 let minimizada = false;
@@ -51,7 +54,12 @@ let indice = 0;
 let temporizador: number | undefined;
 let ultimoRefresco = 0;
 
-const entorno: Entorno = { datos, activo: () => activa, reducido: () => movimientoReducido.matches };
+const entorno: Entorno = {
+  datos,
+  activo: () => activa,
+  reducido: () => movimientoReducido.matches,
+  abrirAjustes: () => void abrirAjustesConsumo().catch(() => {}),
+};
 const esVisible = () => document.visibilityState === "visible" && !minimizada;
 
 // --- Datos ---
@@ -178,6 +186,17 @@ void alContextoConsumo((s) => {
 });
 void alDetalleConsumo(() => void recibirDetalle());
 void alDiagnosticoConsumo(recibirDiag);
+// Se escribió o llegó un archivo semanal: solo al HISTÓRICO le interesa, y solo si es el apartado activo
+void alArchivoConsumo(() => {
+  if (activa && APARTADOS[indice].id === "historico") pintar("archivo");
+});
+// El nombre de este equipo no cambia: se pide una vez y se repinta lo que lo usa (EQUIPOS)
+void equipoConsumo()
+  .then((n) => {
+    datos.equipo = n;
+    pintar("detalle");
+  })
+  .catch(() => {});
 void alDatosConsumo((d) => {
   datos.disco = d;
   if (activa) pintarDisco();
@@ -188,6 +207,7 @@ window.addEventListener("pagehide", () => void vistaConsumo("ventana", false).ca
 // --- Barra de título ---
 const ventana = getCurrentWindow();
 q("minimizar").addEventListener("click", () => void ventana.minimize().catch(() => {}));
+q("ajustes").addEventListener("click", entorno.abrirAjustes);
 q("cerrar").addEventListener("click", () => void ventana.close().catch(() => {}));
 
 // Esc no cierra (es una ventana normal); las flechas cambian de apartado

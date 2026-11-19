@@ -30,6 +30,12 @@ pub fn nombre_equipo() -> String {
     std::env::var("COMPUTERNAME").unwrap_or_else(|_| "PC".into())
 }
 
+/// El nombre de este equipo, para marcarlo entre los de EQUIPOS.
+#[tauri::command]
+pub fn equipo_consumo() -> String {
+    nombre_equipo()
+}
+
 fn es_num(v: Option<&Value>) -> Option<f64> {
     v.and_then(Value::as_f64)
 }

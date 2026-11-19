@@ -123,3 +123,43 @@ fn con_consumo_abierto_no_avisa_ni_escribe() {
     // sin nada nuevo no se pregunta por el proceso
     let _ = procesar_avisos(&mut est, &f, &uso(10.0, 10_000.0), 1000.0, true, || panic!("no debe preguntar"));
 }
+
+#[test]
+fn vista_historico_se_guarda_y_conserva_lo_ajeno() {
+    let d = carpeta("vista");
+    let f = d.join("consumo_ajustes.json");
+    // sin fichero: la vista de la primera vez
+    let v0 = leer_vista_historico(&f);
+    assert_eq!((v0.grupo.as_str(), v0.unidad.as_str(), v0.periodo.as_str(), v0.paso.as_str()), ("proyecto", "eur", "todo", "auto"));
+    // con un fichero de Consumo: se conservan las claves ajenas y las casillas de dentro de la vista
+    std::fs::write(&f, r#"{"zoom":1.5,"suscripcion_eur":20,"historico_vista":{"grupo":"equipo","sel":{"equipo":["A"]},"geom":"1100x760+20+5"}}"#).unwrap();
+    assert!(guardar_vista_historico(&f, &json!({"periodo": "mes", "unidad": "tokens", "paso": "semana", "raro": 1})).unwrap());
+    let v = leer(&f);
+    assert_eq!(v["zoom"], json!(1.5));
+    assert_eq!(v["suscripcion_eur"], json!(20));
+    assert_eq!(v["historico_vista"]["grupo"], "equipo");
+    assert_eq!(v["historico_vista"]["periodo"], "mes");
+    assert_eq!(v["historico_vista"]["unidad"], "tokens");
+    assert_eq!(v["historico_vista"]["paso"], "semana");
+    assert_eq!(v["historico_vista"]["sel"], json!({"equipo": ["A"]}));
+    assert_eq!(v["historico_vista"]["geom"], "1100x760+20+5");
+    assert!(v["historico_vista"].get("raro").is_none());
+    let l = leer_vista_historico(&f);
+    assert_eq!((l.periodo.as_str(), l.unidad.as_str(), l.modo.as_str()), ("mes", "tokens", "apilado"));
+    // sin cambios no se reescribe (ni deja temporales)
+    assert!(!guardar_vista_historico(&f, &json!({"periodo": "mes", "unidad": "tokens"})).unwrap());
+    assert!(!d.join("consumo_ajustes.json.tmp").exists());
+    // un valor malo no pisa lo bueno: vale lo de la primera vez para esa clave
+    assert!(guardar_vista_historico(&f, &json!({"modo": "lineas"})).unwrap());
+    assert_eq!(leer_vista_historico(&f).modo, "lineas");
+    guardar_vista_historico(&f, &json!({"unidad": "nada"})).unwrap();
+    assert_eq!(leer_vista_historico(&f).unidad, "eur");
+    // fichero que no es un objeto: no se pisa
+    std::fs::write(&f, "no es json").unwrap();
+    assert!(guardar_vista_historico(&f, &json!({"modo": "lineas"})).is_err());
+    assert_eq!(std::fs::read_to_string(&f).unwrap(), "no es json");
+    // sin fichero se crea
+    let n = d.join("nuevo.json");
+    assert!(guardar_vista_historico(&n, &json!({"grupo": "modelo"})).unwrap());
+    assert_eq!(leer_vista_historico(&n).grupo, "modelo");
+}

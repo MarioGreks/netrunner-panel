@@ -152,6 +152,18 @@ pub fn ir_a_evento(app: AppHandle, id: String) {
     });
 }
 
+/// Abre el panel como una apertura manual y le pide mostrar AJUSTES en la sección CONSUMO. Lo usa
+/// la ventana flotante de CONSUMO.
+#[tauri::command]
+pub fn abrir_ajustes_consumo(app: AppHandle) {
+    mostrar_panel(&app);
+    // El panel debe haber procesado `panel://mostrar` antes de recibir la sección
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(180));
+        let _ = app.emit("panel://ajustes", "consumo");
+    });
+}
+
 /// Muestra la miniventana reafirmando el fondo transparente del webview: en Windows, tras
 /// ocultarla o cambiarle el tamaño, WebView2 puede pintar de negro lo que queda fuera de
 /// las esquinas cortadas.

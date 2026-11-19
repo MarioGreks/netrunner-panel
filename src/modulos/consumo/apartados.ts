@@ -27,6 +27,7 @@ import {
   plantillaLimite,
   ventanasDe,
 } from "./piezas";
+import { montarHistorico } from "./historico";
 import { montarEquipos, montarProyectos, montarUso } from "./reparto";
 
 /** Lo último que llegó del núcleo; lo rellena la página y lo leen los apartados. */
@@ -39,10 +40,12 @@ export interface Datos {
   sesiones: SesionContexto[];
   diag: DiagnosticoConsumo | null;
   disco: DatosDisco | null;
+  /** Nombre de este equipo (para marcarlo en EQUIPOS); "" hasta que llega. */
+  equipo: string;
 }
 
 /** Qué dato cambió (el apartado repinta solo lo que le toca). */
-export type Cambio = "estado" | "serie" | "detalle" | "contexto" | "diag" | "todo";
+export type Cambio = "estado" | "serie" | "detalle" | "contexto" | "diag" | "archivo" | "todo";
 
 export interface Apartado {
   pintar(cambio: Cambio): void;
@@ -56,6 +59,8 @@ export interface Entorno {
   /** La ventana se ve (no minimizada ni oculta): si no, nada se pinta. */
   activo(): boolean;
   reducido(): boolean;
+  /** Abre el panel en AJUSTES → CONSUMO. */
+  abrirAjustes(): void;
 }
 
 export interface InfoApartado {
@@ -204,7 +209,7 @@ function montarRitmo(raiz: HTMLElement, e: Entorno): Apartado {
 
   return {
     pintar(c) {
-      if (c === "contexto" || c === "diag") return;
+      if (c === "contexto" || c === "diag" || c === "archivo") return;
       if (c !== "detalle") {
         textos();
         lienzo.redibujar();
@@ -259,7 +264,7 @@ function montarDias(raiz: HTMLElement, e: Entorno): Apartado {
 
   return {
     pintar(c) {
-      if (c === "contexto" || c === "diag") return;
+      if (c === "contexto" || c === "diag" || c === "archivo") return;
       if (c === "detalle" || c === "todo") {
         textos();
         lienzo.redibujar();
@@ -295,7 +300,7 @@ export const APARTADOS: InfoApartado[] = [
   { id: "proyectos", titulo: "PROYECTOS", montar: montarProyectos },
   { id: "equipos", titulo: "EQUIPOS", montar: montarEquipos },
   { id: "uso", titulo: "USO", montar: montarUso },
-  { id: "historico", titulo: "HISTÓRICO", montar: null },
+  { id: "historico", titulo: "HISTÓRICO", montar: montarHistorico },
 ];
 
 export const montarApartado = (info: InfoApartado, raiz: HTMLElement, e: Entorno): Apartado =>

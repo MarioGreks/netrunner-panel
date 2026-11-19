@@ -323,6 +323,8 @@ export type EventoPanel =
   | "sistema://muestra"
   | "calendario://estado"
   | "consumo://estado"
+  | "consumo://contexto"
+  | "consumo://detalle"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"
@@ -376,6 +378,32 @@ export const estadoConsumo = () => invoke<EstadoConsumo>("estado_consumo");
 /** Se emite cuando cambia usage.json (no cada segundo: la cuenta atrás se recalcula con `estadoConsumo`). */
 export const alEstadoConsumo = (cb: (estado: EstadoConsumo) => void) =>
   alEvento<EstadoConsumo>("consumo://estado", cb);
+
+/** Lo lleno que está el contexto de una sesión: bien (< 50 %), medio (< 80 %) o alto. */
+export type NivelContexto = "bien" | "medio" | "alto";
+/** Una sesión viva de Claude Code con el contexto que lleva. */
+export interface SesionContexto {
+  /** Id de la sesión (nombre de su transcripción). */
+  id: string;
+  proyecto: string;
+  tokens: number;
+  /** Tokens sobre la ventana máxima, de 0 a 1. */
+  fraccion: number;
+  nivel: NivelContexto;
+  /** Título del chat en la app de Claude; si no hay, el proyecto. */
+  nombre: string;
+  /** Tiene chat en la app de Claude (se puede abrir con `abrirChatConsumo`). */
+  tieneChat: boolean;
+}
+/** Último contexto calculado (vacío hasta que `vistaConsumo(true)` provoque el primer cálculo). */
+export const contextoConsumo = () => invoke<SesionContexto[]>("contexto_consumo");
+/** Abre el chat de la sesión en la app de Claude. Falla si la sesión no tiene chat. */
+export const abrirChatConsumo = (id: string) => invoke<void>("abrir_chat_consumo", { id });
+/** Avisa de que la pestaña CONSUMO o la ventana flotante se ven (true) o se ocultan (false): solo con la vista a la vista se calcula el contexto. */
+export const vistaConsumo = (visible: boolean) => invoke<void>("vista_consumo", { visible });
+/** Se emite cada 5 s (si cambió algo) mientras la vista está a la vista. */
+export const alContextoConsumo = (cb: (sesiones: SesionContexto[]) => void) =>
+  alEvento<SesionContexto[]>("consumo://contexto", cb);
 
 // --- Actualizador ---
 export interface InfoActualizacion {

@@ -4,19 +4,32 @@
 //! Gasto de recursos mínimo: un hilo que cada 60 s mira solo la fecha de modificación de
 //! `usage.json`; si no cambió, no hace nada más.
 
+//! Detalle por transcripciones: un lector incremental de `~/.claude/projects` que corre cada
+//! 10 min, y el contexto por sesión, que solo se calcula (cada 5 s) mientras la interfaz tenga a
+//! la vista la pestaña CONSUMO o la ventana flotante.
+
+pub mod contexto;
 pub mod limites;
+pub mod rutas;
+pub mod transcripciones;
 #[cfg(test)]
 mod pruebas;
+#[cfg(test)]
+mod pruebas_detalle;
 
 use std::ffi::OsStr;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 use sysinfo::{ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager, State};
+
+use contexto::{Contexto, SesionContexto, CTX_MAX};
+use transcripciones::{raiz_proyectos, Lector, CUBO};
 
 use limites::{
     apuntar, calcular_cinco, calcular_semanal, cargar_hist, guardar_hist, leer_uso,
@@ -176,9 +189,175 @@ pub fn iniciar(app: &AppHandle) {
         interno: Mutex::new(Interno::default()),
         carpeta,
     });
+    app.manage(Detalle::nuevo());
     let app = app.clone();
+    let a = app.clone();
     thread::spawn(move || loop {
-        vuelta(&app, &app.state::<Consumo>());
+        vuelta(&a, &a.state::<Consumo>());
         thread::sleep(INTERVALO);
     });
+    let a = app.clone();
+    thread::spawn(move || hilo_contexto(&a));
+    thread::spawn(move || hilo_lector(&app));
+}
+
+// --- Detalle por transcripciones y contexto por sesión ---
+
+/// Ventana de contexto con la que se calcula. El ajuste del usuario vendrá en otro encargo:
+/// cambiar solo esto.
+const CTX_MAX_ACTUAL: u64 = CTX_MAX;
+/// Cada cuánto se recalcula el contexto mientras la vista está a la vista.
+const CADA_CONTEXTO: Duration = Duration::from_secs(5);
+/// Primera lectura de transcripciones tras arrancar.
+const INICIO_LECTOR: Duration = Duration::from_secs(30);
+/// Al hacerse visible la vista, se relee si la última lectura es más vieja que esto.
+const LECTURA_VIEJA: Duration = Duration::from_secs(60);
+
+/// Estado compartido del detalle: el lector, el contexto y lo último que se calculó.
+pub struct Detalle {
+    lector: Mutex<Lector>,
+    contexto: Mutex<Contexto>,
+    /// Último contexto calculado (None: aún no se ha calculado).
+    ultimo: Mutex<Option<Vec<SesionContexto>>>,
+    /// id de sesión -> id del chat de la app de Claude, de las sesiones del último cálculo.
+    chats: Mutex<std::collections::HashMap<String, String>>,
+    /// La pestaña CONSUMO o la ventana flotante se ven.
+    visible: AtomicBool,
+    /// Para despertar al hilo de contexto al instante cuando cambia `visible`.
+    aviso_ctx: (Mutex<()>, Condvar),
+    /// Petición de lectura anticipada al hilo del lector.
+    pedir_lectura: (Mutex<bool>, Condvar),
+    leyendo: AtomicBool,
+    ultima_lectura: Mutex<Option<Instant>>,
+}
+
+fn bloquear<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+impl Detalle {
+    fn nuevo() -> Detalle {
+        Detalle {
+            lector: Mutex::new(Lector::new(raiz_proyectos())),
+            contexto: Mutex::new(Contexto::real()),
+            ultimo: Mutex::new(None),
+            chats: Mutex::new(Default::default()),
+            visible: AtomicBool::new(false),
+            aviso_ctx: (Mutex::new(()), Condvar::new()),
+            pedir_lectura: (Mutex::new(false), Condvar::new()),
+            leyendo: AtomicBool::new(false),
+            ultima_lectura: Mutex::new(None),
+        }
+    }
+}
+
+/// Último contexto calculado por sesión (vacío hasta el primer cálculo: se calcula y se emite
+/// `consumo://contexto` en cuanto `vista_consumo(true)` avisa de que se ve).
+#[tauri::command]
+pub fn contexto_consumo(detalle: State<'_, Detalle>) -> Vec<SesionContexto> {
+    bloquear(&detalle.ultimo).clone().unwrap_or_default()
+}
+
+/// Abre el chat de una sesión en la app de Claude (`claude://claude.ai/epitaxy/<chat>`).
+#[tauri::command]
+pub fn abrir_chat_consumo(id: String, detalle: State<'_, Detalle>) -> Result<(), String> {
+    let chat = bloquear(&detalle.chats).get(&id).cloned();
+    let chat = chat.ok_or("La sesión no tiene chat en la app de Claude")?;
+    if chat.is_empty() || !chat.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err("Id de chat no válido".into());
+    }
+    crate::accesos::abrir_shell(format!("claude://claude.ai/epitaxy/{chat}"))
+}
+
+/// La interfaz avisa de que la pestaña CONSUMO o la ventana flotante se ven (o dejan de verse):
+/// solo mientras se ven corre el hilo de contexto.
+#[tauri::command]
+pub fn vista_consumo(visible: bool, detalle: State<'_, Detalle>) {
+    {
+        let _g = bloquear(&detalle.aviso_ctx.0);
+        detalle.visible.store(visible, Ordering::SeqCst);
+        detalle.aviso_ctx.1.notify_all();
+    }
+    if !visible || detalle.leyendo.load(Ordering::SeqCst) {
+        return;
+    }
+    let vieja = bloquear(&detalle.ultima_lectura).is_none_or(|t| t.elapsed() > LECTURA_VIEJA);
+    if vieja {
+        *bloquear(&detalle.pedir_lectura.0) = true;
+        detalle.pedir_lectura.1.notify_all();
+    }
+}
+
+/// Recalcula el contexto, lo guarda y, si cambió (o `siempre`), avisa a la interfaz.
+fn recalcular_contexto(app: &AppHandle, d: &Detalle, siempre: bool) {
+    let lista = bloquear(&d.contexto).calcular(ahora_s(), CTX_MAX_ACTUAL);
+    {
+        let g = bloquear(&d.contexto);
+        let mut chats = bloquear(&d.chats);
+        chats.clear();
+        for s in lista.iter().filter(|s| s.tiene_chat) {
+            if let Some(c) = g.id_chat(&s.id) {
+                chats.insert(s.id.clone(), c);
+            }
+        }
+    }
+    let cambio = bloquear(&d.ultimo).as_ref() != Some(&lista);
+    if cambio || siempre {
+        *bloquear(&d.ultimo) = Some(lista.clone());
+        let _ = app.emit("consumo://contexto", lista);
+    }
+}
+
+/// Hilo del contexto: dormido mientras la vista está oculta (se despierta con la `Condvar`, sin
+/// sondeo); a la vista, cada 5 s.
+fn hilo_contexto(app: &AppHandle) {
+    let d = app.state::<Detalle>();
+    loop {
+        let mut siempre = false;
+        {
+            let g = bloquear(&d.aviso_ctx.0);
+            if !d.visible.load(Ordering::SeqCst) {
+                siempre = true; // al volver a verse, la interfaz recibe el estado aunque no haya cambiado
+                let _g = d
+                    .aviso_ctx
+                    .1
+                    .wait_while(g, |_| !d.visible.load(Ordering::SeqCst))
+                    .unwrap_or_else(|e| e.into_inner());
+            }
+        }
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            recalcular_contexto(app, &d, siempre)
+        }));
+        let g = bloquear(&d.aviso_ctx.0);
+        let _ = d
+            .aviso_ctx
+            .1
+            .wait_timeout_while(g, CADA_CONTEXTO, |_| d.visible.load(Ordering::SeqCst));
+    }
+}
+
+/// Hilo del lector: 30 s después de arrancar, y luego cada 10 min (o antes si la vista se hace
+/// visible con la última lectura vieja). Avisa con `consumo://detalle` (sin carga).
+fn hilo_lector(app: &AppHandle) {
+    let d = app.state::<Detalle>();
+    let mut espera = INICIO_LECTOR;
+    loop {
+        {
+            let g = bloquear(&d.pedir_lectura.0);
+            let (mut g, _) = d
+                .pedir_lectura
+                .1
+                .wait_timeout_while(g, espera, |p| !*p)
+                .unwrap_or_else(|e| e.into_inner());
+            *g = false;
+        }
+        d.leyendo.store(true, Ordering::SeqCst);
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            bloquear(&d.lector).actualizar(None)
+        }));
+        *bloquear(&d.ultima_lectura) = Some(Instant::now());
+        d.leyendo.store(false, Ordering::SeqCst);
+        let _ = app.emit("consumo://detalle", ());
+        espera = Duration::from_secs(CUBO as u64);
+    }
 }

@@ -378,7 +378,7 @@ pub fn reordenar_accesos(app: AppHandle, ids: Vec<String>) -> Result<(), String>
     })
 }
 
-fn abrir_shell(objetivo: String) -> Result<(), String> {
+pub(crate) fn abrir_shell(objetivo: String) -> Result<(), String> {
     let r = en_hilo_com(move || unsafe {
         let h = ShellExecuteW(
             None,

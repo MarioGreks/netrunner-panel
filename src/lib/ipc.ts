@@ -325,6 +325,8 @@ export type EventoPanel =
   | "consumo://estado"
   | "consumo://contexto"
   | "consumo://detalle"
+  | "consumo://diagnostico"
+  | "consumo://datos"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"
@@ -468,6 +470,49 @@ export interface DetalleConsumo {
 export const detalleConsumo = () => invoke<DetalleConsumo | null>("detalle_consumo");
 /** Se emite tras cada lectura de transcripciones (cada ~10 min), sin carga: pedir `detalleConsumo()`. */
 export const alDetalleConsumo = (cb: () => void) => alEvento<null>("consumo://detalle", () => cb());
+
+// --- Plugin «uso-consumo» y espacio en disco ---
+export type CodigoDiagnosticoConsumo =
+  | "ok"
+  | "fallo_carga"
+  | "sin_claude"
+  | "error"
+  | "sin_plugin"
+  | "desactivado"
+  | "sin_datos";
+export interface DiagnosticoConsumo {
+  codigo: CodigoDiagnosticoConsumo;
+  /** Texto para el usuario (puede tener saltos de línea). */
+  texto: string;
+  /** Se puede ofrecer «Instalar/Arreglar plugin» (sin_plugin o fallo_carga, con `claude`). */
+  puedeInstalar: boolean;
+}
+/** Diagnóstico a petición (llama a `claude plugin list`: tarda unos segundos; también devuelve «ok»). */
+export const diagnosticoConsumo = () => invoke<DiagnosticoConsumo>("diagnostico_consumo");
+/** Instala o arregla el plugin (hasta ~6 min en el peor caso). Resuelve con el texto de éxito; rechaza con el texto de error. Solo a petición del usuario. */
+export const instalarPluginConsumo = () => invoke<string>("instalar_plugin_consumo");
+/** Se emite (una vez, no se repite hasta que vuelvan datos o pasen 6 h) cuando, con Claude abierto, faltan datos y el diagnóstico automático no es «ok». No instala nada. */
+export const alDiagnosticoConsumo = (cb: (d: DiagnosticoConsumo) => void) =>
+  alEvento<DiagnosticoConsumo>("consumo://diagnostico", cb);
+
+export type NivelDatosConsumo = "ok" | "aviso" | "lleno";
+export interface DatosDisco {
+  /** GB que ocupan los datos (null hasta la primera medida, ~30 s tras arrancar). */
+  gb: number | null;
+  /** Máximo elegido en la app Consumo (0 = sin máximo). */
+  gbMax: number;
+  /** GB libres en la unidad de los datos (null si no se pudo saber). */
+  libre: number | null;
+  /** «◔ 2,50 / 5 GB» (vacío sin medir). */
+  texto: string;
+  /** 0-1 respecto al máximo (null sin máximo). */
+  fraccion: number | null;
+  nivel: NivelDatosConsumo;
+}
+/** Lo último medido (se mide como mucho cada 30 min). */
+export const datosConsumo = () => invoke<DatosDisco>("datos_consumo");
+/** Se emite una vez por arranque al pasar del máximo de GB. */
+export const alDatosConsumo = (cb: (d: DatosDisco) => void) => alEvento<DatosDisco>("consumo://datos", cb);
 
 // --- Actualizador ---
 export interface InfoActualizacion {

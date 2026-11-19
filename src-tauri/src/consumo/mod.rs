@@ -13,15 +13,20 @@
 //! historial del % son los de la cuenta: se fusionan con los de los demás equipos.
 
 pub mod contexto;
+pub mod disco;
 pub mod equipos;
 pub mod limites;
+pub mod plugin;
 pub mod reparto;
 pub mod rutas;
 pub mod transcripciones;
+pub mod vigilancia;
 #[cfg(test)]
 mod pruebas;
 #[cfg(test)]
 mod pruebas_detalle;
+#[cfg(test)]
+mod pruebas_plugin;
 #[cfg(test)]
 mod pruebas_reparto;
 
@@ -254,10 +259,13 @@ pub fn iniciar(app: &AppHandle) {
         Equipos::real(&carpeta, &home),
     ));
     app.manage(Detalle::nuevo());
+    app.manage(vigilancia::Vigilancia::nuevo(home));
     let app = app.clone();
     let a = app.clone();
     thread::spawn(move || loop {
         vuelta(&a, &a.state::<Consumo>());
+        // Diagnóstico automático del plugin: solo mira memoria salvo que haya síntoma.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| vigilancia::vigilar_plugin(&a)));
         thread::sleep(INTERVALO);
     });
     let a = app.clone();
@@ -433,6 +441,8 @@ fn hilo_lector(app: &AppHandle) {
         *bloquear(&d.ultima_lectura) = Some(Instant::now());
         d.leyendo.store(false, Ordering::SeqCst);
         let _ = app.emit("consumo://detalle", ());
+        // Espacio de datos: como mucho cada 30 min.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| vigilancia::medir_disco(app)));
         espera = Duration::from_secs(CUBO as u64);
     }
 }

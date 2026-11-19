@@ -109,7 +109,7 @@ Leído del campo `license` de `node_modules/<paquete>/package.json`. No se lista
 
 ## Consumo (Kuerb0)
 
-El módulo CONSUMO (`src-tauri/src/consumo/`, `src/modulos/consumo/`, la ventana `consumo.html`) es un port a Rust y TypeScript de la app **Consumo** de Kuerb0 (https://github.com/Kuerb0): su lógica de límites, ritmo y estimaciones, el reparto por proyecto, la sincronización entre equipos, el archivo semanal, los informes y la guía. El plugin de Claude Code `uso-consumo` (`src-tauri/recursos/consumo-mod/`) es suyo y va sin cambios. Gracias a Kuerb0 por la app original.
+El módulo CONSUMO (`src-tauri/src/consumo/`, `src/modulos/consumo/`, la ventana `consumo.html`) es un port a Rust y TypeScript de la app **Consumo** de Kuerb0 (https://github.com/Kuerb0): su lógica de límites, ritmo y estimaciones, el reparto por proyecto, la sincronización entre equipos, el archivo semanal, los informes y la guía. El plugin de Claude Code `uso-consumo` (`src-tauri/recursos/consumo-mod/`) es suyo y va sin cambios. Se incluye con el consentimiento expreso de su autor, que lo publica con licencia MIT (la misma que Netrunner Panel). Gracias a Kuerb0 por la app original.
 
 ## Fuentes incluidas en la app
 

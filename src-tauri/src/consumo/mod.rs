@@ -7,15 +7,23 @@
 //! Detalle por transcripciones: un lector incremental de `~/.claude/projects` que corre cada
 //! 10 min, y el contexto por sesión, que solo se calcula (cada 5 s) mientras la interfaz tenga a
 //! la vista la pestaña CONSUMO o la ventana flotante.
+//!
+//! Reparto y equipos: tras cada lectura se publica lo propio en las carpetas de sincronización,
+//! se lee lo de los demás equipos y se reparte el % semanal (`reparto`, `equipos`). El uso y el
+//! historial del % son los de la cuenta: se fusionan con los de los demás equipos.
 
 pub mod contexto;
+pub mod equipos;
 pub mod limites;
+pub mod reparto;
 pub mod rutas;
 pub mod transcripciones;
 #[cfg(test)]
 mod pruebas;
 #[cfg(test)]
 mod pruebas_detalle;
+#[cfg(test)]
+mod pruebas_reparto;
 
 use std::ffi::OsStr;
 use std::path::PathBuf;
@@ -29,10 +37,12 @@ use sysinfo::{ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use contexto::{Contexto, SesionContexto, CTX_MAX};
-use transcripciones::{raiz_proyectos, Lector, CUBO};
+use equipos::{cubos_json, cubos_propios, fusionar_hist, fusionar_uso, Equipos};
+use reparto::{calcular_detalle, unir_cubos, CuboEq, DetalleConsumo};
+use transcripciones::{raiz_proyectos, Cubo, Lector, CUBO};
 
 use limites::{
-    apuntar, calcular_cinco, calcular_semanal, cargar_hist, guardar_hist, leer_uso,
+    apuntar_con, calcular_cinco, calcular_semanal, cargar_hist, guardar_hist, leer_uso,
     renovar_ventanas, EstadoVentana, Muestra, Uso, RETENER_5H, RETENER_SEMANAL, VIEJO,
 };
 
@@ -74,9 +84,19 @@ pub fn calcular_estado(
 /// Datos en memoria; solo se rehacen cuando cambia usage.json (o el historial en disco).
 #[derive(Default)]
 struct Interno {
+    /// Uso de la cuenta: lo más reciente entre este equipo y los demás.
     uso: Uso,
+    /// Lo que ve el plugin de este equipo (usage.json); es lo que se publica.
+    uso_local: Uso,
+    /// Historial propio (el único que se escribe) y fusionado con el de los demás (`todas*`).
     hist: Vec<Muestra>,
     hist5: Vec<Muestra>,
+    todas: Vec<Muestra>,
+    todas5: Vec<Muestra>,
+    /// Firma de los ficheros de los otros equipos que se fusionaron por última vez.
+    firma_otros: Option<u64>,
+    /// El `consumo.json` propio no se pudo publicar del todo (Consumo.exe abierto, OneDrive a medias).
+    pub_pendiente: bool,
     mtime_uso: Option<SystemTime>,
     mtime_hist: Option<SystemTime>,
     mtime_hist5: Option<SystemTime>,
@@ -88,6 +108,21 @@ struct Interno {
 pub struct Consumo {
     interno: Mutex<Interno>,
     carpeta: Option<PathBuf>,
+    /// Sincronización con los otros equipos (carpetas, cachés y lo ya publicado).
+    equipos: Mutex<Equipos>,
+    /// No escribe nada en disco (la prueba de humo, que es solo de lectura).
+    solo_lectura: bool,
+}
+
+impl Consumo {
+    fn nuevo(carpeta: Option<PathBuf>, equipos: Equipos) -> Consumo {
+        Consumo {
+            interno: Mutex::new(Interno::default()),
+            carpeta,
+            equipos: Mutex::new(equipos),
+            solo_lectura: false,
+        }
+    }
 }
 
 fn ahora_s() -> f64 {
@@ -115,7 +150,7 @@ fn consumo_en_marcha() -> bool {
 
 fn calcular_ahora(c: &Consumo) -> EstadoConsumo {
     let g = c.interno.lock().unwrap_or_else(|e| e.into_inner());
-    calcular_estado(&g.uso, &g.hist, &g.hist5, ahora_s())
+    calcular_estado(&g.uso, &g.todas, &g.todas5, ahora_s())
 }
 
 /// Estado actual del consumo (los cálculos dependen de la hora: se hacen al pedirlos).
@@ -124,10 +159,12 @@ pub fn estado_consumo(consumo: State<'_, Consumo>) -> EstadoConsumo {
     calcular_ahora(&consumo)
 }
 
-/// Lee usage.json si cambió su fecha, apunta las muestras y avisa a la interfaz.
-fn vuelta(app: &AppHandle, c: &Consumo) {
+/// Refresca lo que depende de ficheros: lee usage.json y los `consumo.json` de los otros equipos
+/// si cambiaron, los fusiona, apunta las muestras y publica el `consumo.json` propio si cambió.
+/// True si hay algo nuevo que avisar a la interfaz.
+fn refrescar(c: &Consumo, mut proceso: impl FnMut() -> bool) -> bool {
     let Some(carpeta) = c.carpeta.as_ref() else {
-        return;
+        return false;
     };
     let ruta_uso = carpeta.join("usage.json");
     let (ruta_h, ruta_h5) = (
@@ -135,36 +172,52 @@ fn vuelta(app: &AppHandle, c: &Consumo) {
         carpeta.join("consumo_historial_5h.json"),
     );
     let m = mtime(&ruta_uso);
-    let hay_que_escribir = {
-        let mut g = c.interno.lock().unwrap_or_else(|e| e.into_inner());
-        if g.mtime_uso == m {
-            return; // sin cambios: ni se lee ni se calcula
-        }
+    // Los de los otros equipos: solo se vuelve a leer lo que cambió (caché por fecha y tamaño).
+    let (otros, firma) = bloquear(&c.equipos).leer_consumo();
+    let mut marcha: Option<bool> = None;
+    let mut en_marcha = || *marcha.get_or_insert_with(|| proceso());
+    let mut g = c.interno.lock().unwrap_or_else(|e| e.into_inner());
+    if g.mtime_uso == m && g.firma_otros == Some(firma) && !g.pub_pendiente {
+        return false; // sin cambios: ni se lee ni se calcula
+    }
+    if g.mtime_uso != m {
         g.mtime_uso = m;
-        g.uso = leer_uso(&ruta_uso);
-        // El historial se relee solo si otro (la app Consumo) lo cambió en disco.
-        let (mh, mh5) = (mtime(&ruta_h), mtime(&ruta_h5));
-        if mh != g.mtime_hist {
-            g.hist = cargar_hist(&ruta_h);
-            g.mtime_hist = mh;
-            g.sucio_hist = false;
-        }
-        if mh5 != g.mtime_hist5 {
-            g.hist5 = cargar_hist(&ruta_h5);
-            g.mtime_hist5 = mh5;
-            g.sucio_hist5 = false;
-        }
-        let ahora = ahora_s();
-        let uso = renovar_ventanas(&g.uso, ahora);
-        let (s7, s5) = (uso.semanal, uso.cinco_horas);
-        g.sucio_hist |= apuntar(&mut g.hist, s7.as_ref(), ahora, RETENER_SEMANAL);
-        g.sucio_hist5 |= apuntar(&mut g.hist5, s5.as_ref(), ahora, RETENER_5H);
-        g.sucio_hist || g.sucio_hist5
-    };
+        g.uso_local = leer_uso(&ruta_uso);
+    }
+    g.firma_otros = Some(firma);
+    // El historial propio se relee solo si otro (la app Consumo) lo cambió en disco.
+    let (mh, mh5) = (mtime(&ruta_h), mtime(&ruta_h5));
+    if mh != g.mtime_hist {
+        g.hist = cargar_hist(&ruta_h);
+        g.mtime_hist = mh;
+        g.sucio_hist = false;
+    }
+    if mh5 != g.mtime_hist5 {
+        g.hist5 = cargar_hist(&ruta_h5);
+        g.mtime_hist5 = mh5;
+        g.sucio_hist5 = false;
+    }
+    let ahora = ahora_s();
+    // El uso y el historial son los de la cuenta: lo más reciente de todos los equipos.
+    let g = &mut *g;
+    g.uso = fusionar_uso(&g.uso_local, &otros);
+    let mut todas = fusionar_hist(&g.hist, otros.iter().map(|o| &o.hist[..]));
+    let mut todas5 = fusionar_hist(&g.hist5, otros.iter().map(|o| &o.hist5[..]));
+    let uso = renovar_ventanas(&g.uso, ahora);
+    let a7 = apuntar_con(&mut g.hist, &todas, uso.semanal.as_ref(), ahora, RETENER_SEMANAL);
+    let a5 = apuntar_con(&mut g.hist5, &todas5, uso.cinco_horas.as_ref(), ahora, RETENER_5H);
+    if a7 {
+        todas = fusionar_hist(&g.hist, otros.iter().map(|o| &o.hist[..]));
+    }
+    if a5 {
+        todas5 = fusionar_hist(&g.hist5, otros.iter().map(|o| &o.hist5[..]));
+    }
+    (g.todas, g.todas5) = (todas, todas5);
+    g.sucio_hist |= a7;
+    g.sucio_hist5 |= a5;
 
     // Solo se enumeran procesos si hay algo que escribir; con Consumo.exe en marcha escribe él.
-    if hay_que_escribir && !consumo_en_marcha() {
-        let mut g = c.interno.lock().unwrap_or_else(|e| e.into_inner());
+    if (g.sucio_hist || g.sucio_hist5) && !c.solo_lectura && !en_marcha() {
         if g.sucio_hist && guardar_hist(&ruta_h, &g.hist).is_ok() {
             g.sucio_hist = false;
             g.mtime_hist = mtime(&ruta_h);
@@ -174,21 +227,32 @@ fn vuelta(app: &AppHandle, c: &Consumo) {
             g.mtime_hist5 = mtime(&ruta_h5);
         }
     }
-    let _ = app.emit("consumo://estado", calcular_ahora(c));
+    // Publica lo propio en las carpetas de sincronización (solo si cambió; nunca con Consumo.exe).
+    let p = bloquear(&c.equipos).publicar_consumo(&g.uso_local, &g.hist, &g.hist5, || !en_marcha());
+    g.pub_pendiente = p.pendiente;
+    true
+}
+
+/// Lee usage.json si cambió su fecha (o lo de otros equipos) y avisa a la interfaz.
+fn vuelta(app: &AppHandle, c: &Consumo) {
+    if refrescar(c, consumo_en_marcha) {
+        let _ = app.emit("consumo://estado", calcular_ahora(c));
+    }
 }
 
 /// Registra el estado y arranca el hilo muestreador.
 pub fn iniciar(app: &AppHandle) {
-    let carpeta = app
+    let home = app
         .path()
         .home_dir()
         .ok()
         .or_else(|| std::env::var_os("USERPROFILE").map(PathBuf::from))
-        .map(|h| h.join(".claude").join("statusbar"));
-    app.manage(Consumo {
-        interno: Mutex::new(Interno::default()),
-        carpeta,
-    });
+        .unwrap_or_default();
+    let carpeta = home.join(".claude").join("statusbar");
+    app.manage(Consumo::nuevo(
+        Some(carpeta.clone()),
+        Equipos::real(&carpeta, &home),
+    ));
     app.manage(Detalle::nuevo());
     let app = app.clone();
     let a = app.clone();
@@ -229,6 +293,8 @@ pub struct Detalle {
     pedir_lectura: (Mutex<bool>, Condvar),
     leyendo: AtomicBool,
     ultima_lectura: Mutex<Option<Instant>>,
+    /// Último reparto calculado tras una lectura (None: aún no hay).
+    resultado: Mutex<Option<DetalleConsumo>>,
 }
 
 fn bloquear<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -237,8 +303,12 @@ fn bloquear<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Detalle {
     fn nuevo() -> Detalle {
+        Detalle::con_lector(Lector::new(raiz_proyectos()))
+    }
+
+    fn con_lector(lector: Lector) -> Detalle {
         Detalle {
-            lector: Mutex::new(Lector::new(raiz_proyectos())),
+            lector: Mutex::new(lector),
             contexto: Mutex::new(Contexto::real()),
             ultimo: Mutex::new(None),
             chats: Mutex::new(Default::default()),
@@ -247,6 +317,7 @@ impl Detalle {
             pedir_lectura: (Mutex::new(false), Condvar::new()),
             leyendo: AtomicBool::new(false),
             ultima_lectura: Mutex::new(None),
+            resultado: Mutex::new(None),
         }
     }
 }
@@ -352,12 +423,55 @@ fn hilo_lector(app: &AppHandle) {
             *g = false;
         }
         d.leyendo.store(true, Ordering::SeqCst);
-        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            bloquear(&d.lector).actualizar(None)
+        let c = app.state::<Consumo>();
+        let calculado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            ciclo_detalle(&c, &d, ahora_s(), consumo_en_marcha)
         }));
+        if let Ok(Some(det)) = calculado {
+            *bloquear(&d.resultado) = Some(det);
+        }
         *bloquear(&d.ultima_lectura) = Some(Instant::now());
         d.leyendo.store(false, Ordering::SeqCst);
         let _ = app.emit("consumo://detalle", ());
         espera = Duration::from_secs(CUBO as u64);
     }
+}
+
+/// Lo que se hace tras cada lectura (y solo entonces): leer lo nuevo de las transcripciones,
+/// publicar los cubos propios si cambiaron, leer los de los demás equipos y repartir el % semanal.
+/// None si no hay semana (sin `resetsAt`). `permitido` se pregunta solo si hay algo que escribir.
+fn ciclo_detalle(
+    c: &Consumo,
+    d: &Detalle,
+    ahora: f64,
+    permitido: impl FnOnce() -> bool,
+) -> Option<DetalleConsumo> {
+    let propios: Vec<Cubo> = {
+        let mut l = bloquear(&d.lector);
+        l.actualizar(None);
+        l.cubos()
+    };
+    let (yo, otros_det, otros_cons) = {
+        let mut e = bloquear(&c.equipos);
+        e.publicar_detalle(cubos_json(&propios), permitido);
+        (e.yo.clone(), e.leer_detalle(), e.leer_consumo().0)
+    };
+    let propios: Vec<CuboEq> = cubos_propios(&propios, &yo);
+    let mut listas: Vec<&[CuboEq]> = vec![&propios[..]];
+    listas.extend(otros_det.iter().map(|o| &o.cubos[..]));
+    let todos = unir_cubos(&listas);
+    let (todas, reset, pct) = {
+        let g = bloquear(&c.interno);
+        let sev = renovar_ventanas(&g.uso, ahora).semanal;
+        (g.todas.clone(), sev.as_ref().and_then(|v| v.resets_at), sev.map(|v| v.pct))
+    };
+    let otros_ts: Vec<(String, f64)> = otros_cons.iter().map(|o| (o.machine.clone(), o.ts)).collect();
+    Some(calcular_detalle(&todas, reset?, &todos, &otros_ts, pct, ahora))
+}
+
+/// Último reparto calculado (no calcula: se rehace tras cada lectura de transcripciones, cada
+/// 10 min). None hasta la primera lectura o si aún no hay semana.
+#[tauri::command]
+pub fn detalle_consumo(detalle: State<'_, Detalle>) -> Option<DetalleConsumo> {
+    bloquear(&detalle.resultado).clone()
 }

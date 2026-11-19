@@ -209,8 +209,26 @@ pub fn nueva_muestra(hist: &[Muestra], v: Option<&Ventana>, ahora: f64) -> Optio
 }
 
 /// Añade la muestra si cambió el reset o el %, descartando lo más viejo que `retener`. True si cambió.
+#[allow(dead_code)] // lo usan las pruebas; el hilo usa `apuntar_con`
 pub fn apuntar(hist: &mut Vec<Muestra>, v: Option<&Ventana>, ahora: f64, retener: f64) -> bool {
     let Some(nuevo) = nueva_muestra(hist, v, ahora) else {
+        return false;
+    };
+    hist.retain(|m| m.0 > ahora - retener);
+    hist.push(nuevo);
+    true
+}
+
+/// Como `apuntar`, pero decide con el historial fusionado de todos los equipos (`todas`, ordenado):
+/// si otro equipo ya apuntó ese mismo % y reset, no se duplica. Solo se añade al historial propio.
+pub fn apuntar_con(
+    hist: &mut Vec<Muestra>,
+    todas: &[Muestra],
+    v: Option<&Ventana>,
+    ahora: f64,
+    retener: f64,
+) -> bool {
+    let Some(nuevo) = nueva_muestra(todas, v, ahora) else {
         return false;
     };
     hist.retain(|m| m.0 > ahora - retener);

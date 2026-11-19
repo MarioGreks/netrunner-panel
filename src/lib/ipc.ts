@@ -405,6 +405,70 @@ export const vistaConsumo = (visible: boolean) => invoke<void>("vista_consumo", 
 export const alContextoConsumo = (cb: (sesiones: SesionContexto[]) => void) =>
   alEvento<SesionContexto[]>("consumo://contexto", cb);
 
+// --- Detalle del consumo: reparto del % semanal (todos los equipos) ---
+/** Nombre y % (un modelo, una tarea, una sesión...). Los nombres especiales: "(otros)" = no atribuido, "(resto)" = proyectos menores juntos, "(pequeñas)" = sesiones diminutas juntas. */
+export interface ParteConsumo {
+  nombre: string;
+  pct: number;
+}
+export interface GrupoProyectoConsumo {
+  nombre: string;
+  pct: number;
+  /** De mayor a menor. */
+  sesiones: ParteConsumo[];
+}
+export interface SerieConsumo {
+  nombre: string;
+  valores: number[];
+}
+export interface PorHoraConsumo {
+  /** Instante (s) de la medianoche local de hace 6 días: la hora i empieza en inicio + 3600·i. */
+  inicio: number;
+  /** 168 valores (% de esa hora) por serie. */
+  series: SerieConsumo[];
+}
+export interface EquipoConsumo {
+  nombre: string;
+  pct: number;
+  /** Última actividad (s desde la época). */
+  ultima: number | null;
+}
+export interface DiasConsumo {
+  /** `AAAA-MM-DD` de cada día natural de la semana (8 si el reset no es a medianoche). */
+  fechas: string[];
+  total: number[];
+  /** % de cada día por proyecto (los 5 mayores, "(resto)" y "(otros)"). */
+  series: SerieConsumo[];
+}
+export interface PreviasConsumo {
+  reset: number;
+  pct: number;
+  proyectos: GrupoProyectoConsumo[];
+  equipos: ParteConsumo[];
+  modelos: ParteConsumo[];
+  tareas: ParteConsumo[];
+}
+export interface DetalleConsumo {
+  /** Fin de la semana del reparto (s): es la vigente si coincide (±10 min) con `semanal.resetsAt`. */
+  reset: number;
+  pct: number | null;
+  /** Cuándo se calculó (s). */
+  calculado: number;
+  proyectos: GrupoProyectoConsumo[];
+  porHora: PorHoraConsumo;
+  equipos: EquipoConsumo[];
+  modelos: ParteConsumo[];
+  tareas: ParteConsumo[];
+  dias: DiasConsumo;
+  /** Equipos cuyo Consumo no guarda el tipo de tarea. */
+  sinTarea: string[];
+  previas: PreviasConsumo | null;
+}
+/** Último reparto calculado (no calcula; null hasta la primera lectura de transcripciones o sin semana). */
+export const detalleConsumo = () => invoke<DetalleConsumo | null>("detalle_consumo");
+/** Se emite tras cada lectura de transcripciones (cada ~10 min), sin carga: pedir `detalleConsumo()`. */
+export const alDetalleConsumo = (cb: () => void) => alEvento<null>("consumo://detalle", () => cb());
+
 // --- Actualizador ---
 export interface InfoActualizacion {
   version: string;

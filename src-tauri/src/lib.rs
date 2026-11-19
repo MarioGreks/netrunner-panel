@@ -51,6 +51,7 @@ pub fn run() {
             consumo::contexto_consumo,
             consumo::abrir_chat_consumo,
             consumo::vista_consumo,
+            consumo::detalle_consumo,
             cuentas::estado_cuentas,
             cuentas::marcar_cuenta,
             cuentas::desmarcar_cuenta,

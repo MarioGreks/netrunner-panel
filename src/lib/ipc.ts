@@ -325,6 +325,7 @@ export type EventoPanel =
   | "consumo://estado"
   | "consumo://contexto"
   | "consumo://detalle"
+  | "consumo://archivo"
   | "consumo://diagnostico"
   | "consumo://datos"
   | "consumo://ajustes"
@@ -494,6 +495,149 @@ export interface DetalleConsumo {
 export const detalleConsumo = () => invoke<DetalleConsumo | null>("detalle_consumo");
 /** Se emite tras cada lectura de transcripciones (cada ~10 min), sin carga: pedir `detalleConsumo()`. */
 export const alDetalleConsumo = (cb: () => void) => alEvento<null>("consumo://detalle", () => cb());
+
+// --- Archivo semanal e histórico (meses atrás: Claude Code borra las transcripciones a los pocos días) ---
+export type PeriodoHistoricoConsumo =
+  | "semana"
+  | "semana_pasada"
+  | "mes"
+  | "mes_pasado"
+  | "3meses"
+  | "anio"
+  | "todo"
+  | "personalizado";
+export type GrupoHistoricoConsumo = "proyecto" | "equipo" | "modelo" | "tarea";
+export type UnidadHistoricoConsumo =
+  | "eur"
+  | "dias"
+  | "usd"
+  | "tokens"
+  | "horas"
+  | "eur_h"
+  | "pct_h"
+  | "tok_h";
+export type PasoHistoricoConsumo = "dia" | "semana" | "mes";
+/** Lo que se pide; lo que falte o esté mal vale lo de la primera vez (€, proyecto, todo, apilado, auto). */
+export interface VistaHistoricoPedida {
+  periodo?: PeriodoHistoricoConsumo;
+  /** `AAAA-MM-DD`, solo con periodo «personalizado» (cualquiera de las dos puede faltar). */
+  desde?: string;
+  hasta?: string;
+  grupo?: GrupoHistoricoConsumo;
+  unidad?: UnidadHistoricoConsumo;
+  modo?: "lineas" | "apilado";
+  paso?: PasoHistoricoConsumo | "auto";
+}
+/** La vista ya saneada (lo que de verdad se calculó). */
+export interface VistaHistorico {
+  grupo: GrupoHistoricoConsumo;
+  unidad: UnidadHistoricoConsumo;
+  periodo: PeriodoHistoricoConsumo;
+  desde: string;
+  hasta: string;
+  modo: "lineas" | "apilado";
+  acum: boolean;
+  sin: boolean;
+  horas: boolean;
+  sel: Record<string, string[]>;
+  geom: string;
+  paso: PasoHistoricoConsumo | "auto";
+}
+export interface ValorUnidadConsumo {
+  unidad: UnidadHistoricoConsumo;
+  nombre: string;
+  /** null = sin cifra (cociente sin horas activas). */
+  valor: number | null;
+  /** Ya formateado a la española («1,04 €», «2,5 M»). */
+  texto: string;
+}
+export interface SerieHistoricoConsumo {
+  clave: string;
+  nombre: string;
+  /** Un valor por tramo en la unidad pedida SIN escalar (se dibuja multiplicando por `escala`); null = sin cifra. */
+  valores: (number | null)[];
+  acumulado: (number | null)[];
+  /** Horas activas por tramo y acumuladas. */
+  horas: number[];
+  horasAcumuladas: number[];
+  total: number | null;
+  texto: string;
+}
+export interface FilaHistoricoConsumo {
+  clave: string;
+  nombre: string;
+  valor: number;
+  texto: string;
+  /** El valor en cada unidad (columnas extra de la tabla). */
+  valores: ValorUnidadConsumo[];
+  /** % del total (en las unidades por hora, el del numerador). */
+  participacion: number;
+  textoParticipacion: string;
+  /** `AAAA-MM-DD`. */
+  primero: string;
+  ultimo: string;
+  semanas: number;
+}
+export interface HistoricoConsumo {
+  vista: VistaHistorico;
+  titulo: string;
+  hayDatos: boolean;
+  paso: PasoHistoricoConsumo;
+  unidad: UnidadHistoricoConsumo;
+  unidadNombre: string;
+  grupoNombre: string;
+  /** Los valores se dibujan multiplicados por esto (tokens en millones: 1e-6). */
+  escala: number;
+  /** Etiqueta del eje X y clave (inicio del tramo) de cada tramo. */
+  etiquetas: string[];
+  clavesTramo: string[];
+  /** De mayor a menor en la unidad pedida. */
+  series: SerieHistoricoConsumo[];
+  /** Lo no atribuido por tramo (solo en € y días; null en el resto) y acumulado. */
+  sinAtribuir: number[] | null;
+  sinAcumulado: number[] | null;
+  /** Horas activas de todas las series por tramo y acumuladas. */
+  horas: number[];
+  horasAcumuladas: number[];
+  filas: FilaHistoricoConsumo[];
+  /** Totales del periodo en cada unidad (en € y días incluye lo sin atribuir). */
+  total: ValorUnidadConsumo[];
+  /** Lo sin atribuir en € y días. */
+  sin: ValorUnidadConsumo[];
+  desde: string | null;
+  hasta: string | null;
+  maquinas: string[];
+  /** Archivos semanales leídos (uno por equipo y semana) y semanas distintas. */
+  archivos: number;
+  semanas: number;
+  precioEurMes: number;
+  eurSemana: number;
+}
+/** El histórico para dibujar. Se calcula solo al pedirlo (en otro hilo, con los ficheros en caché): no llamar en bucle. */
+export const historicoConsumo = (vista: VistaHistoricoPedida = {}) =>
+  invoke<HistoricoConsumo>("historico_consumo", { vista });
+export interface EquipoSemanaConsumo {
+  nombre: string;
+  pct: number;
+  tokens: number;
+}
+export interface SemanaArchivadaConsumo {
+  /** Inicio de la semana, `AAAA-MM-DD`. */
+  inicio: string;
+  inicioTs: number;
+  reset: number;
+  pctAtribuido: number;
+  pctSinAtribuir: number;
+  pctRepartido: number;
+  /** % que marcaba la cuenta al cerrar la semana, si algún archivo lo guarda. */
+  pctFinal: number | null;
+  equipos: EquipoSemanaConsumo[];
+  dias: number;
+}
+/** Semanas archivadas, de la más nueva a la más vieja. */
+export const semanasArchivadas = () => invoke<SemanaArchivadaConsumo[]>("semanas_archivadas");
+/** Se escribió (o se copió entre carpetas) algún archivo semanal, sin carga: volver a pedir `historicoConsumo`. */
+export const alArchivoConsumo = (cb: () => void) => alEvento<null>("consumo://archivo", () => cb());
 
 // --- Plugin «uso-consumo» y espacio en disco ---
 export type CodigoDiagnosticoConsumo =

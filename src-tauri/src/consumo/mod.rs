@@ -12,11 +12,16 @@
 //! se lee lo de los demás equipos y se reparte el % semanal (`reparto`, `equipos`). El uso y el
 //! historial del % son los de la cuenta: se fusionan con los de los demás equipos.
 
+pub mod agregado;
 pub mod ajustes;
+pub mod archivar;
+pub mod archivo;
 pub mod aviso;
 pub mod contexto;
 pub mod disco;
 pub mod equipos;
+pub mod historico;
+pub mod historico_vista;
 pub mod limites;
 pub mod plugin;
 pub mod ventana;
@@ -27,6 +32,8 @@ pub mod transcripciones;
 pub mod vigilancia;
 #[cfg(test)]
 mod pruebas;
+#[cfg(test)]
+mod pruebas_archivo;
 #[cfg(test)]
 mod pruebas_ajustes;
 #[cfg(test)]
@@ -48,6 +55,8 @@ use sysinfo::{ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use ajustes::Hechos;
+use archivar::{archivar, Entrada, EstadoArchivo, Medidas, ResultadoArchivo};
+use archivo::CacheArchivos;
 use contexto::{Contexto, SesionContexto};
 use equipos::{cubos_json, cubos_propios, fusionar_hist, fusionar_uso, Equipos};
 use reparto::{calcular_detalle, unir_cubos, CuboEq, DetalleConsumo};
@@ -128,6 +137,10 @@ pub struct Consumo {
     ctx_max: AtomicU64,
     /// Avisos del 80 % / 100 % ya dados.
     hechos: Mutex<Hechos>,
+    /// Qué se archivó ya (archivo semanal): solo se rehace lo que cambió.
+    archivo: Mutex<EstadoArchivo>,
+    /// Ficheros del historial leídos con caché y último histórico calculado.
+    lectura: Mutex<historico_vista::LecturaHistorico>,
 }
 
 impl Consumo {
@@ -142,7 +155,22 @@ impl Consumo {
             solo_lectura: false,
             ctx_max: AtomicU64::new(ctx_max),
             hechos: Mutex::new(Hechos::default()),
+            archivo: Mutex::new(EstadoArchivo::default()),
+            lectura: Mutex::new(historico_vista::LecturaHistorico::default()),
         }
+    }
+
+    /// Las carpetas `historial` de las carpetas de sincronización que existen, o la local si no hay.
+    pub(crate) fn carpetas_historial(&self) -> Vec<PathBuf> {
+        let activas = bloquear(&self.equipos).activas();
+        disco::carpetas_historial(&activas, &self.carpeta.clone().unwrap_or_default())
+    }
+
+    /// Precio de la suscripción en €/mes (ajuste `suscripcion_eur`; por defecto 18).
+    pub(crate) fn suscripcion_eur(&self) -> f64 {
+        self.carpeta
+            .as_ref()
+            .map_or(historico::PRECIO_EUR, |d| ajustes::leer_suscripcion(&d.join(ajustes::FICHERO_AJUSTES)))
     }
 }
 
@@ -527,14 +555,19 @@ fn hilo_lector(app: &AppHandle) {
         d.leyendo.store(true, Ordering::SeqCst);
         let c = app.state::<Consumo>();
         let calculado = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            ciclo_detalle(&c, &d, ahora_s(), consumo_en_marcha)
+            ciclo_detalle_con(&c, &d, ahora_s(), || !consumo_en_marcha())
         }));
-        if let Ok(Some(det)) = calculado {
+        let mut archivado = false;
+        if let Ok(Some((det, arch))) = calculado {
             *bloquear(&d.resultado) = Some(det);
+            archivado = arch.escritos + arch.puenteados > 0;
         }
         *bloquear(&d.ultima_lectura) = Some(Instant::now());
         d.leyendo.store(false, Ordering::SeqCst);
         let _ = app.emit("consumo://detalle", ());
+        if archivado {
+            let _ = app.emit("consumo://archivo", ());
+        }
         // Espacio de datos: como mucho cada 30 min.
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| vigilancia::medir_disco(app)));
         espera = Duration::from_secs(CUBO as u64);
@@ -542,25 +575,40 @@ fn hilo_lector(app: &AppHandle) {
 }
 
 /// Lo que se hace tras cada lectura (y solo entonces): leer lo nuevo de las transcripciones,
-/// publicar los cubos propios si cambiaron, leer los de los demás equipos y repartir el % semanal.
-/// None si no hay semana (sin `resetsAt`). `permitido` se pregunta solo si hay algo que escribir.
+/// publicar los cubos propios si cambiaron, leer los de los demás equipos, repartir el % semanal
+/// y archivar la semana (solo si cambió). None si no hay semana (sin `resetsAt`). `permitido`
+/// (true = se puede escribir: Consumo.exe no está abierto) se pregunta solo si hay algo que
+/// escribir, y una sola vez por ciclo.
+#[cfg(test)]
 fn ciclo_detalle(
     c: &Consumo,
     d: &Detalle,
     ahora: f64,
-    permitido: impl FnOnce() -> bool,
+    permitido: impl FnMut() -> bool,
 ) -> Option<DetalleConsumo> {
-    let propios: Vec<Cubo> = {
+    ciclo_detalle_con(c, d, ahora, permitido).map(|x| x.0)
+}
+
+fn ciclo_detalle_con(
+    c: &Consumo,
+    d: &Detalle,
+    ahora: f64,
+    mut permitido: impl FnMut() -> bool,
+) -> Option<(DetalleConsumo, ResultadoArchivo)> {
+    let mut permiso: Option<bool> = None;
+    let mut ok = || *permiso.get_or_insert_with(|| permitido());
+    let propios_c: Vec<Cubo> = {
         let mut l = bloquear(&d.lector);
         l.actualizar(None);
         l.cubos()
     };
-    let (yo, otros_det, otros_cons) = {
+    let (yo, otros_det, otros_cons, carpetas, sin_escribir) = {
         let mut e = bloquear(&c.equipos);
-        e.publicar_detalle(cubos_json(&propios), permitido);
-        (e.yo.clone(), e.leer_detalle(), e.leer_consumo().0)
+        e.publicar_detalle(cubos_json(&propios_c), &mut ok);
+        let carpetas = disco::carpetas_historial(&e.activas(), &c.carpeta.clone().unwrap_or_default());
+        (e.yo.clone(), e.leer_detalle(), e.leer_consumo().0, carpetas, e.solo_lectura)
     };
-    let propios: Vec<CuboEq> = cubos_propios(&propios, &yo);
+    let propios: Vec<CuboEq> = cubos_propios(&propios_c, &yo);
     let mut listas: Vec<&[CuboEq]> = vec![&propios[..]];
     listas.extend(otros_det.iter().map(|o| &o.cubos[..]));
     let todos = unir_cubos(&listas);
@@ -569,8 +617,30 @@ fn ciclo_detalle(
         let sev = renovar_ventanas(&g.uso, ahora).semanal;
         (g.todas.clone(), sev.as_ref().and_then(|v| v.resets_at), sev.map(|v| v.pct))
     };
+    let reset = reset?;
     let otros_ts: Vec<(String, f64)> = otros_cons.iter().map(|o| (o.machine.clone(), o.ts)).collect();
-    Some(calcular_detalle(&todas, reset?, &todos, &otros_ts, pct, ahora))
+    let det = calcular_detalle(&todas, reset, &todos, &otros_ts, pct, ahora);
+    let mut arch = ResultadoArchivo::default();
+    if !c.solo_lectura && !sin_escribir {
+        let entrada = Entrada { yo: &yo, reset, pct, propios: &propios_c, todos: &todos, todas: &todas };
+        let mut est = bloquear(&c.archivo);
+        let mut lectura = bloquear(&c.lectura);
+        let cache: &mut CacheArchivos = &mut lectura.cache;
+        arch = archivar(
+            &mut est,
+            cache,
+            &entrada,
+            &carpetas,
+            ahora,
+            false,
+            || {
+                let mut l = bloquear(&d.lector);
+                Medidas { costes: l.costes(), cache: l.cache(), tiempos: l.tiempos() }
+            },
+            &mut ok,
+        );
+    }
+    Some((det, arch))
 }
 
 /// Último reparto calculado (no calcula: se rehace tras cada lectura de transcripciones, cada

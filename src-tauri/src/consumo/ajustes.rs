@@ -18,6 +18,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use super::contexto::CTX_MAX;
 use super::equipos::escribir_atomico;
+use super::historico::PRECIO_EUR;
 use super::limites::{avisos_nuevos, renovar_ventanas, Aviso, ClaveAviso, Uso};
 use super::vigilancia::Vigilancia;
 use super::{bloquear, vuelta, Consumo};
@@ -65,6 +66,17 @@ pub fn leer_ajustes(fichero: &Path) -> (u64, bool, f64) {
         _ => 0.0,
     };
     (ctx_max_de(&v), avisos, gb)
+}
+
+/// `suscripcion_eur` de `consumo_ajustes.json` (solo lectura): los € al mes de la suscripción, con
+/// los que el Histórico pasa el % del límite a € de coste real; un valor que no sirve (no es un
+/// número, <= 0 o > 5.000) vale el de por defecto.
+pub fn leer_suscripcion(fichero: &Path) -> f64 {
+    let v = leer_json(fichero);
+    match v.get("suscripcion_eur") {
+        Some(x) if super::historico_vista::precio_valido(x) => x.as_f64().unwrap_or(PRECIO_EUR),
+        _ => PRECIO_EUR,
+    }
 }
 
 /// Guarda las tres claves conservando todo lo demás del fichero. Solo escribe si algo cambia

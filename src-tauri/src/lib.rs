@@ -54,6 +54,8 @@ pub fn run() {
             consumo::serie_consumo,
             consumo::ventana::abrir_ventana_consumo,
             consumo::detalle_consumo,
+            consumo::historico_vista::historico_consumo,
+            consumo::historico_vista::semanas_archivadas,
             consumo::vigilancia::diagnostico_consumo,
             consumo::vigilancia::instalar_plugin_consumo,
             consumo::vigilancia::datos_consumo,

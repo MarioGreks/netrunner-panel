@@ -44,6 +44,42 @@ pub fn carpetas_historial(sync_activas: &[PathBuf], local: &Path) -> Vec<PathBuf
     }
 }
 
+/// La carpeta Documentos de Windows (`FOLDERID_Documents`: puede estar redirigida a OneDrive); si
+/// no se encuentra, `~/Documents`.
+#[allow(dead_code)] // solo la usa la copia larga de Consumo (`historico_largo`), que no se porta
+pub fn carpeta_documentos(home: &Path) -> PathBuf {
+    use windows::Win32::System::Com::CoTaskMemFree;
+    use windows::Win32::UI::Shell::{FOLDERID_Documents, SHGetKnownFolderPath, KF_FLAG_DEFAULT};
+    // SAFETY: SHGetKnownFolderPath devuelve una cadena propia que se libera con CoTaskMemFree.
+    let ruta = unsafe {
+        SHGetKnownFolderPath(&FOLDERID_Documents, KF_FLAG_DEFAULT, None).ok().and_then(|p| {
+            let s = p.to_string().ok();
+            CoTaskMemFree(Some(p.0 as *const _));
+            s
+        })
+    };
+    match ruta {
+        Some(r) if Path::new(&r).is_dir() => PathBuf::from(r),
+        _ => home.join("Documents"),
+    }
+}
+
+/// Dónde guardaría este PC la copia larga (ajuste `historico_pc`; vacío = Documentos\Consumo).
+#[allow(dead_code)] // ver `carpeta_documentos`
+pub fn carpeta_historico_pc(ajuste: &str, home: &Path) -> PathBuf {
+    match ajuste.trim() {
+        "" => carpeta_documentos(home).join("Consumo"),
+        r => PathBuf::from(r),
+    }
+}
+
+/// La carpeta `historial` donde se guardan los archivos semanales: la de la carpeta de
+/// sincronización principal si existe (así la ven todos los equipos); si no, la local.
+#[allow(dead_code)] // se usa `carpetas_historial` (todas); esta es la forma de una sola carpeta de Consumo
+pub fn carpeta_historial(principal: &Path, local: &Path) -> PathBuf {
+    if principal.is_dir() { principal } else { local }.join("historial")
+}
+
 /// GB que ocupan los datos de Consumo en este equipo: las transcripciones, las carpetas historial
 /// de sincronización y, si se da, la copia local del histórico largo (`historico_pc`, del encargo 8).
 pub fn medir_datos(proyectos: &Path, historiales: &[PathBuf], historico_pc: Option<&Path>) -> f64 {

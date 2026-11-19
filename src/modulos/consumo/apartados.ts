@@ -27,6 +27,7 @@ import {
   plantillaLimite,
   ventanasDe,
 } from "./piezas";
+import { montarEquipos, montarProyectos, montarUso } from "./reparto";
 
 /** Lo último que llegó del núcleo; lo rellena la página y lo leen los apartados. */
 export interface Datos {
@@ -291,9 +292,9 @@ export const APARTADOS: InfoApartado[] = [
   { id: "resumen", titulo: "RESUMEN", montar: montarResumen },
   { id: "ritmo", titulo: "RITMO", montar: montarRitmo },
   { id: "dias", titulo: "DÍAS", montar: montarDias },
-  { id: "proyectos", titulo: "PROYECTOS", montar: null },
-  { id: "equipos", titulo: "EQUIPOS", montar: null },
-  { id: "uso", titulo: "USO", montar: null },
+  { id: "proyectos", titulo: "PROYECTOS", montar: montarProyectos },
+  { id: "equipos", titulo: "EQUIPOS", montar: montarEquipos },
+  { id: "uso", titulo: "USO", montar: montarUso },
   { id: "historico", titulo: "HISTÓRICO", montar: null },
 ];
 

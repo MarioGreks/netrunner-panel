@@ -131,3 +131,29 @@ html, body { margin: 0; height: 100%; }
 .cv__ley i { width: 9px; height: 9px; display: inline-block; }
 
 .cv__proximamente { text-align: center; padding: var(--esp-5) 0; font-family: var(--fuente-titulo); }
+
+/* --- Repartos: PROYECTOS, EQUIPOS y USO --- */
+.rp__ayuda { margin: 0 0 var(--esp-3); font-size: var(--tam-xs); letter-spacing: 0.08em; color: var(--texto-tenue); }
+.rp__lista { display: flex; flex-direction: column; gap: var(--esp-3); }
+.rp__lista--tenue { gap: var(--esp-2); opacity: 0.8; }
+.rp__fila { display: flex; flex-direction: column; gap: var(--esp-1); min-width: 0; }
+.rp__cab { display: flex; justify-content: space-between; align-items: baseline; gap: var(--esp-3); }
+.rp__nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--tam-s); letter-spacing: 0.08em; color: var(--texto); }
+.rp__nombre--tenue { color: var(--texto-tenue); }
+.rp__pct { font-family: var(--fuente-titulo); font-size: var(--tam-s); font-weight: 700; color: var(--texto); }
+.rp__barra { display: flex; gap: 2px; height: 14px; }
+.rp__seg { display: block; min-width: 2px; }
+.rp__sub { font-size: var(--tam-xs); letter-spacing: 0.08em; color: var(--texto-tenue); margin: 0; }
+.rp__mas { display: flex; justify-content: space-between; font-size: var(--tam-s); letter-spacing: 0.08em; color: var(--texto-tenue); }
+.rp__previa { display: flex; align-items: center; gap: var(--esp-2); }
+.rp__previa .rp__nombre { flex: 1; }
+.rp__punto { width: 9px; height: 9px; flex: none; display: inline-block; }
+.rp__hace { font-size: var(--tam-xs); letter-spacing: 0.08em; color: var(--texto-tenue); }
+.rp__hace--parado { color: var(--amarillo); }
+.rp__nota { margin: var(--esp-3) 0 0; font-size: var(--tam-xs); letter-spacing: 0.08em; color: var(--texto-tenue); }
+.rp__vacio { text-align: center; padding: var(--esp-4) 0; }
+.rp__apilada { display: flex; gap: 2px; height: 34px; }
+.rp__seg--apilado { height: 100%; }
+.rp__ley { display: flex; flex-direction: column; gap: var(--esp-2); margin-top: var(--esp-3); }
+.rp__ley-fila { display: flex; align-items: center; gap: var(--esp-2); }
+.rp__ley-fila .rp__nombre { flex: 1; }

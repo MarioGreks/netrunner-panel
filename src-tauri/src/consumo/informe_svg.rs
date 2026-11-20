@@ -1,11 +1,8 @@
-//! Piezas SVG de los informes HTML (port de `LienzoSVG`, `paso_eje`, `_svg_columnas`,
+//! Piezas SVG de los informes HTML (port de `paso_eje`, `_svg_columnas`,
 //! `_horas_periodo` y `_svg_calor` de `informe.py`). Todo son funciones puras que devuelven texto.
 //!
 //! Diferencia con Consumo: las series de una columna van ordenadas por nombre (en Python, por
 //! orden de inserción); solo cambia el orden del texto de ayuda de cada columna.
-
-// El lienzo SVG solo lo usaría el parámetro `graficos` (gráficos de la tarjeta), que no se porta.
-#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
@@ -41,135 +38,6 @@ fn g(x: f64) -> String {
         format!("{}", x as i64)
     } else {
         format!("{x}")
-    }
-}
-
-// ---------- lienzo SVG ----------
-
-/// Un «canvas» que en vez de dibujar en pantalla va escribiendo SVG. Solo lleva las primitivas que
-/// usaban los pintores de la tarjeta de Consumo.
-#[derive(Default)]
-pub struct LienzoSvg {
-    pub partes: Vec<String>,
-}
-
-fn trazo(color: &str, ancho: f64, dash: Option<&[f64]>) -> String {
-    if color.is_empty() || ancho == 0.0 {
-        return "stroke=\"none\"".into();
-    }
-    let mut s = format!("stroke=\"{color}\" stroke-width=\"{}\"", g(ancho));
-    if let Some(d) = dash {
-        let v: Vec<String> = d.iter().map(|x| g(*x)).collect();
-        let _ = write!(s, " stroke-dasharray=\"{}\"", v.join(" "));
-    }
-    s
-}
-
-fn o_ninguno(s: &str) -> &str {
-    if s.is_empty() {
-        "none"
-    } else {
-        s
-    }
-}
-
-impl LienzoSvg {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    fn puntos(c: &[f64]) -> String {
-        c.chunks_exact(2).map(|p| format!("{:.1},{:.1}", p[0], p[1])).collect::<Vec<_>>().join(" ")
-    }
-
-    pub fn create_line(&mut self, coords: &[f64], fill: &str, width: f64, dash: Option<&[f64]>) {
-        self.partes.push(format!("<polyline points=\"{}\" fill=\"none\" {}/>", Self::puntos(coords), trazo(fill, width, dash)));
-    }
-
-    pub fn create_rectangle(&mut self, c: [f64; 4], fill: &str, outline: &str, width: f64) {
-        self.partes.push(format!(
-            "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{}\" {}/>",
-            c[0].min(c[2]),
-            c[1].min(c[3]),
-            (c[2] - c[0]).abs(),
-            (c[3] - c[1]).abs(),
-            o_ninguno(fill),
-            trazo(outline, width, None)
-        ));
-    }
-
-    pub fn create_oval(&mut self, c: [f64; 4], fill: &str, outline: &str, width: f64) {
-        self.partes.push(format!(
-            "<ellipse cx=\"{:.1}\" cy=\"{:.1}\" rx=\"{:.1}\" ry=\"{:.1}\" fill=\"{}\" {}/>",
-            (c[0] + c[2]) / 2.0,
-            (c[1] + c[3]) / 2.0,
-            (c[2] - c[0]).abs() / 2.0,
-            (c[3] - c[1]).abs() / 2.0,
-            o_ninguno(fill),
-            trazo(outline, width, None)
-        ));
-    }
-
-    pub fn create_polygon(&mut self, coords: &[f64], fill: &str, outline: &str, width: f64) {
-        self.partes.push(format!("<polygon points=\"{}\" fill=\"{}\" {}/>", Self::puntos(coords), o_ninguno(fill), trazo(outline, width, None)));
-    }
-
-    /// Arco o trozo de tarta como los de tkinter: `start` en grados desde las 3 en punto y
-    /// `extent` positivo = sentido antihorario. `estilo`: «arc» o «pieslice».
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_arc(&mut self, c: [f64; 4], start: f64, extent: f64, estilo: &str, fill: &str, outline: &str, width: f64, dash: Option<&[f64]>) {
-        let (cx, cy, rx, ry) = ((c[0] + c[2]) / 2.0, (c[1] + c[3]) / 2.0, (c[2] - c[0]).abs() / 2.0, (c[3] - c[1]).abs() / 2.0);
-        let relleno = o_ninguno(fill);
-        if extent.abs() >= 360.0 {
-            let r = if estilo != "arc" { relleno } else { "none" };
-            self.partes.push(format!(
-                "<ellipse cx=\"{cx:.1}\" cy=\"{cy:.1}\" rx=\"{rx:.1}\" ry=\"{ry:.1}\" fill=\"{r}\" {}/>",
-                trazo(outline, width, dash)
-            ));
-            return;
-        }
-        let (a0, a1) = (start.to_radians(), (start + extent).to_radians());
-        let (ax, ay, bx, by) = (cx + rx * a0.cos(), cy - ry * a0.sin(), cx + rx * a1.cos(), cy - ry * a1.sin());
-        let arco = format!("A {rx:.1} {ry:.1} 0 {} {} {bx:.2} {by:.2}", i32::from(extent.abs() > 180.0), i32::from(extent <= 0.0));
-        if estilo == "arc" {
-            self.partes.push(format!("<path d=\"M {ax:.2} {ay:.2} {arco}\" fill=\"none\" {}/>", trazo(outline, width, dash)));
-        } else {
-            self.partes.push(format!("<path d=\"M {cx:.1} {cy:.1} L {ax:.2} {ay:.2} {arco} Z\" fill=\"{relleno}\" {}/>", trazo(outline, width, dash)));
-        }
-    }
-
-    /// `halo`: color del borde que separa el texto de lo que hay debajo. `fuente` = (puntos, negrita).
-    /// `anchor` como en tkinter («center», «w», «e», «nw»...).
-    #[allow(clippy::too_many_arguments)]
-    pub fn create_text(&mut self, x: f64, y: f64, texto: &str, anchor: &str, fill: &str, fuente: (f64, bool), halo: Option<&str>) {
-        let px = fuente.0 * 4.0 / 3.0; // puntos a píxeles (96 ppp)
-        let peso = if fuente.1 { "bold" } else { "normal" };
-        // ojo: «center» lleva una «e» y una «n», por eso se mira antes que «e» y «n»
-        let horiz = if anchor == "center" {
-            "middle"
-        } else if anchor.contains('w') {
-            "start"
-        } else if anchor.contains('e') {
-            "end"
-        } else {
-            "middle"
-        };
-        let vert = if anchor.contains('n') && anchor != "center" { "hanging" } else { "central" };
-        let borde = halo.map_or(String::new(), |h| format!(" stroke=\"{h}\" stroke-width=\"4\" stroke-linejoin=\"round\" paint-order=\"stroke\""));
-        self.partes.push(format!(
-            "<text x=\"{x:.1}\" y=\"{y:.1}\" text-anchor=\"{horiz}\" dominant-baseline=\"{vert}\" fill=\"{fill}\" font-size=\"{px:.1}\" font-weight=\"{peso}\"{borde}>{}</text>",
-            esc(texto)
-        ));
-    }
-
-    pub fn svg(&self, ancho: f64, alto: f64, titulo: &str) -> String {
-        format!(
-            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {} {}\" role=\"img\" class=\"tk\" font-family=\"Segoe UI, system-ui, sans-serif\"><title>{}</title>{}</svg>",
-            g(ancho),
-            g(alto),
-            esc(titulo),
-            self.partes.concat()
-        )
     }
 }
 

@@ -122,7 +122,6 @@ fn leer_linea_basico() {
     let mut con = serde_json::from_str::<serde_json::Value>(&linea("m9", &ts(0.0), "claude-sonnet-5-5", "C:\\p\\A", "assistant")).unwrap();
     con["message"]["content"] = json!([{"type": "thinking"}, {"type": "tool_use", "name": "Edit"}, {"type": "text", "text": "x"}, "raro"]);
     let b = leer_linea(&con.to_string()).unwrap().bloques;
-    assert_eq!(b, Bloques::de_nombres(&["thinking", "tool:Edit", "text"]));
     assert_eq!(b.tarea(), "codigo");
     // lo que no es del modelo o no se entiende
     assert!(leer_linea(&linea("m1", &ts(0.0), "<synthetic>", "C:\\p", "assistant")).is_none());
@@ -130,21 +129,6 @@ fn leer_linea_basico() {
     assert!(leer_linea("{\"type\":\"user\"}\n").is_none());
     assert!(leer_linea("\"usage\" roto").is_none());
     assert!(leer_linea("{\"type\":\"assistant\",\"message\":{\"usage\":{}},\"timestamp\":\"mal\"}").is_none());
-}
-
-#[test]
-fn tareas_por_bloques() {
-    let t = |n: &[&str]| tarea_de(n);
-    assert_eq!(t(&["tool:Edit", "text"]), "codigo");
-    assert_eq!(t(&["tool:Bash"]), "comandos");
-    assert_eq!(t(&["tool:PowerShell", "tool:Read"]), "comandos");
-    assert_eq!(t(&["tool:Read"]), "explorar");
-    assert_eq!(t(&["tool:Grep", "thinking"]), "explorar");
-    assert_eq!(t(&["tool:WebFetch"]), "web");
-    assert_eq!(t(&["tool:Agent"]), "herramientas");
-    assert_eq!(t(&["text"]), "mensajes");
-    assert_eq!(t(&["thinking"]), "pensar");
-    assert_eq!(t(&[]), "");
 }
 
 #[test]
@@ -450,16 +434,13 @@ fn casillas_estables() {
 }
 
 #[test]
-fn niveles_y_nombres() {
+fn niveles() {
     assert_eq!(nivel_ctx(0.0), NivelContexto::Bien);
     assert_eq!(nivel_ctx(0.49), NivelContexto::Bien);
     assert_eq!(nivel_ctx(0.5), NivelContexto::Medio);
     assert_eq!(nivel_ctx(0.79), NivelContexto::Medio);
     assert_eq!(nivel_ctx(0.8), NivelContexto::Alto);
     assert_eq!(nivel_ctx(7.0), NivelContexto::Alto);
-    assert_eq!(nombre_ctx(1_000_000), "1 M");
-    assert_eq!(nombre_ctx(500_000), "500 k");
-    assert_eq!(nombre_ctx(200_000), "200 k");
 }
 
 fn guardar_chat(dir: &Path, fichero: &str, cuerpo: serde_json::Value) {

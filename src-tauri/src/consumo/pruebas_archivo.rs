@@ -478,46 +478,6 @@ fn la_cache_no_vuelve_a_leer_lo_que_no_cambia() {
     let _ = fs::remove_dir_all(&td);
 }
 
-// ---------- rellenar tiempos ----------
-
-fn a_9_campos(a: &Archivo) -> Value {
-    let mut v = a_json(a);
-    for d in v["dias"].as_object_mut().unwrap().values_mut() {
-        for f in d["f"].as_array_mut().unwrap() {
-            f.as_array_mut().unwrap().truncate(9); // como un archivo antiguo
-        }
-    }
-    v
-}
-
-#[test]
-fn rellenar_tiempos_en_el_sitio() {
-    let s = semana();
-    let td = carpeta("rellenar");
-    let a = construir(&s, "PCA", &s.cubos_a);
-    let mut v = a_9_campos(&a);
-    let fuera = cubo(s.t[0] - 8.0 * 86400.0, "web", "sesion-aaaa-1111", "opus", 1, 1, "comandos");
-    let tiempos = HashMap::from([(clave(&s.cubos_a[0]), 599.6), (clave(&s.cubos_a[1]), 30.0), (clave(&fuera), 99.0)]);
-    assert!(rellenar_tiempos(&mut v, &tiempos));
-    let a2 = limpiar_archivo(&v).unwrap();
-    let mut seg: Vec<f64> = a2.dias.values().flat_map(|d| d.f.iter()).map(|f| f.seg).collect();
-    seg.sort_by(f64::total_cmp);
-    assert_eq!(seg, vec![30.0, 600.0]); // la de fuera de la semana no cuenta
-    assert!(v["dias"].as_object().unwrap().values().all(|d| d["f"].as_array().unwrap().iter().all(|f| f.as_array().unwrap().len() == 10)));
-    assert!(!rellenar_tiempos(&mut v, &tiempos)); // ya rellenado: nada cambia
-    // en carpetas: solo los de la máquina, y solo guarda los que cambian
-    fs::write(td.join(nombre_archivo(&a)), a_9_campos(&a).to_string()).unwrap();
-    let ajeno = Archivo { maquina: "OTRO".into(), ..a.clone() };
-    fs::write(td.join(nombre_archivo(&ajeno)), a_9_campos(&ajeno).to_string()).unwrap();
-    let mut si = || true;
-    assert_eq!(rellenar_carpetas(&[td.clone()], &tiempos, "PCA", &mut si), 1);
-    assert_eq!(rellenar_carpetas(&[td.clone()], &tiempos, "PCA", &mut si), 0);
-    let mut no = || false;
-    assert_eq!(rellenar_carpetas(&[td.clone()], &tiempos, "OTRO", &mut no), 0); // sin permiso no escribe
-    assert_eq!(rellenar_carpetas(&[td.clone()], &tiempos, "OTRO", &mut si), 1);
-    let _ = fs::remove_dir_all(&td);
-}
-
 // ---------- histórico ----------
 
 #[test]

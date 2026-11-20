@@ -13,9 +13,6 @@
 //! archivos_a_podar) ni `rellenar_tiempos_viejos`: son opciones de Consumo que aquí no existen.
 //! Las funciones `rellenar_*` sí están por si se necesitan.
 
-// Parte de la API (guardar_archivo, leer_archivos, rellenar_*) la usan las pruebas y los informes (8b/8c).
-#![allow(dead_code)]
-
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -451,6 +448,7 @@ pub fn escribir_json(carpeta: &Path, nombre: &str, nuevo: &Value) -> io::Result<
     escribir_atomico(carpeta, nombre, &nuevo.to_string())
 }
 
+#[cfg(test)]
 /// Guarda el archivo de la semana solo si cambió lo que lleva. True si se escribió.
 pub fn guardar_archivo(carpeta: &Path, arch: &Archivo, proteger: bool) -> io::Result<bool> {
     let nuevo = a_json(arch);
@@ -550,6 +548,7 @@ impl CacheArchivos {
     }
 
     /// Todos los archivos semanales de la carpeta (los de todos los equipos), ya limpios.
+    #[cfg(test)]
     pub fn leer_archivos(&mut self, carpeta: &Path) -> Vec<Arc<Archivo>> {
         listar_archivos(carpeta).iter().filter_map(|r| self.leer(r)).collect()
     }
@@ -656,83 +655,3 @@ pub fn puentear_archivos(
     }
     (copiados, false)
 }
-
-/// Rellena el 10.º campo (segundos activos) de las filas de un archivo semanal (JSON en bruto, en
-/// el sitio) con `tiempos`: solo las filas que aún tienen 0 y dentro de la semana del archivo.
-/// Todas las filas quedan con 10 campos si cambió algo. True si cambió algún valor.
-pub fn rellenar_tiempos(arch: &mut Value, tiempos: &HashMap<Clave, f64>) -> bool {
-    let Some(ini) = num(arch.get("inicio")) else {
-        return false;
-    };
-    let fin = num(arch.get("reset")).unwrap_or(ini + SEMANA);
-    let mut por_dia: HashMap<(String, String, String, String, String), f64> = HashMap::new();
-    for ((t, proy, ses, modelo, tarea), seg) in tiempos {
-        let t = *t as f64;
-        if ini <= t && t < fin && *seg != 0.0 {
-            let k = (dia_hora(t).0, proy.clone(), ses.chars().take(8).collect(), modelo.to_string(), tarea.to_string());
-            *por_dia.entry(k).or_insert(0.0) += seg;
-        }
-    }
-    let mut cambio = false;
-    let Some(dias) = arch.get_mut("dias").and_then(Value::as_object_mut) else {
-        return false;
-    };
-    for (d, dia_v) in dias.iter_mut() {
-        let Some(filas) = dia_v.get_mut("f").and_then(Value::as_array_mut) else {
-            continue;
-        };
-        for f in filas.iter_mut() {
-            let Some(f) = f.as_array_mut() else {
-                continue;
-            };
-            let s = |i: usize| f.get(i).and_then(Value::as_str).unwrap_or("").to_string();
-            let k = (d.clone(), s(0), s(1).chars().take(8).collect(), s(2), s(3));
-            if let Some(seg) = por_dia.get(&k) {
-                let vacio = f.get(9).is_none_or(|v| v.as_f64().unwrap_or(0.0) == 0.0);
-                if *seg != 0.0 && vacio {
-                    f.truncate(9);
-                    f.push(entero(seg.round_ties_even()));
-                    cambio = true;
-                }
-            }
-        }
-    }
-    if cambio {
-        for dia_v in dias.values_mut() {
-            if let Some(filas) = dia_v.get_mut("f").and_then(Value::as_array_mut) {
-                for f in filas.iter_mut().filter_map(Value::as_array_mut) {
-                    if f.len() < 10 {
-                        f.push(0.into());
-                    }
-                }
-            }
-        }
-    }
-    cambio
-}
-
-/// Rellena los archivos semanales de `maquina` de cada carpeta (leyéndolos tal cual y guardando
-/// solo los que cambian). Devuelve cuántos.
-pub fn rellenar_carpetas(carpetas: &[PathBuf], tiempos: &HashMap<Clave, f64>, maquina: &str, permitido: &mut dyn FnMut() -> bool) -> usize {
-    let prefijo = format!("{maquina}.semana-");
-    let mut n = 0;
-    for carpeta in carpetas {
-        for ruta in listar_archivos(carpeta) {
-            let nombre = ruta.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-            if !nombre.starts_with(&prefijo) {
-                continue;
-            }
-            let Some(mut a) = leer_json(&ruta) else {
-                continue;
-            };
-            if limpiar_archivo(&a).is_none() || !rellenar_tiempos(&mut a, tiempos) || !permitido() {
-                continue;
-            }
-            if escribir_json(carpeta, &nombre, &a).is_ok() {
-                n += 1;
-            }
-        }
-    }
-    n
-}
-

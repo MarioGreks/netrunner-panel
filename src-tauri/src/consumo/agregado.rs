@@ -5,9 +5,6 @@
 //! Diferencia con Consumo: los diccionarios son ordenados por clave (en Python, por orden de
 //! inserción); solo cambia el orden de los empates al ordenar.
 
-// Parte de la API la usarán los informes (encargos 8b/8c).
-#![allow(dead_code)]
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{Datelike, Duration, NaiveDate};

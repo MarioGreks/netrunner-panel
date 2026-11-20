@@ -1,9 +1,6 @@
 //! La vista del Histórico y lo que devuelven los comandos `historico_consumo` y
 //! `semanas_archivadas` (ver `historico.rs` para la agregación y las series).
 
-// Parte de la API la usarán los informes (encargos 8b/8c).
-#![allow(dead_code)]
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;

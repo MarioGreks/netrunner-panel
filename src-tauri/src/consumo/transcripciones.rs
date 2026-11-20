@@ -5,9 +5,6 @@
 //! fichero entero a memoria), los mensajes retenidos son structs de ~60 bytes sin el texto de las
 //! líneas, y lo que caduca se descarta en cada pasada.
 
-// Parte de la API (costes, tiempos, cubos...) la usará el reparto por proyecto (encargo 3).
-#![allow(dead_code)]
-
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -113,19 +110,6 @@ fn bit_herramienta(nombre: &str) -> u8 {
 }
 
 impl Bloques {
-    /// Desde los nombres de Consumo (`text`, `thinking`, `tool:<nombre>`).
-    pub fn de_nombres(nombres: &[&str]) -> Bloques {
-        let mut b = 0;
-        for n in nombres {
-            b |= match *n {
-                "text" => B_TEXTO,
-                "thinking" => B_PENSAR,
-                _ => n.strip_prefix("tool:").map_or(0, bit_herramienta),
-            };
-        }
-        Bloques(b)
-    }
-
     /// Tipo de tarea de una llamada, de más a menos específico; "" si no se sabe.
     pub fn tarea(self) -> &'static str {
         let b = self.0;
@@ -147,11 +131,6 @@ impl Bloques {
             ""
         }
     }
-}
-
-/// Tipo de tarea a partir de los nombres de bloque de Consumo.
-pub fn tarea_de(bloques: &[&str]) -> &'static str {
-    Bloques::de_nombres(bloques).tarea()
 }
 
 /// Un elemento de `content`: solo importa su tipo (y el nombre si es una herramienta).
@@ -550,39 +529,32 @@ impl Lector {
         }
     }
 
-    /// Otras carpetas con copias de transcripciones (histórico largo); hoy no se usa.
-    pub fn con_extras(mut self, extras: Vec<PathBuf>) -> Lector {
-        self.extras = extras.into_iter().filter(|e| !e.as_os_str().is_empty()).collect();
-        self
-    }
-
-    pub fn con_retener(mut self, s: f64) -> Lector {
-        self.retener = s;
-        self
-    }
-
+    #[cfg(test)]
     pub fn con_home(mut self, home: &str) -> Lector {
         self.home = home.to_string();
         self
     }
 
+    #[cfg(test)]
     /// Sustituye la búsqueda de `.git` (para pruebas).
     pub fn con_es_repo(mut self, f: impl Fn(&str) -> bool + Send + Sync + 'static) -> Lector {
         self.es_repo = Box::new(f);
         self
     }
 
+    #[cfg(test)]
     /// Mensajes retenidos.
     pub fn num_mensajes(&self) -> usize {
         self.msgs.len()
     }
 
+    #[cfg(test)]
     /// Transcripciones encontradas ahora en disco (para la prueba de humo).
-    #[allow(dead_code)]
     pub fn contar_ficheros(&self) -> usize {
         self.ficheros().len()
     }
 
+    #[cfg(test)]
     /// Primer cwd de la transcripción principal de una sesión.
     pub fn cwd_sesion(&self, ses: &str) -> Option<&str> {
         self.cwd_ses.get(ses).map(String::as_str)

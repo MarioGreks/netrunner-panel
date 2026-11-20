@@ -5,9 +5,6 @@
 //! `periodo_historico`, `limpiar_vista_historico`...). Todo son funciones puras salvo el comando,
 //! que lee los ficheros con caché y calcula solo cuando la interfaz lo pide.
 
-// Parte de la API (formatos de eje, HTML) la usarán los informes (encargos 8b/8c).
-#![allow(dead_code)]
-
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{Datelike, Duration, NaiveDate};

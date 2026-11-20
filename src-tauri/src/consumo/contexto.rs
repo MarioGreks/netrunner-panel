@@ -21,9 +21,6 @@ pub const CTX_MAX: u64 = 1_000_000;
 pub const CTX_N: usize = 10;
 /// s sin actividad para que una sesión deje de estar viva.
 pub const CTX_VIVA: f64 = 1800.0;
-/// Ventanas de contexto que se pueden elegir.
-#[allow(dead_code)]
-pub const CTX_OPCIONES: [(u64, &str); 3] = [(200_000, "200 k"), (500_000, "500 k"), (1_000_000, "1 M")];
 /// Cola de la transcripción que se mira para el contexto.
 const COLA_CONTEXTO: u64 = 400_000;
 /// Cola y cabeza que se miran para sacar el cwd de la sesión.
@@ -49,16 +46,6 @@ pub fn nivel_ctx(f: f64) -> NivelContexto {
         NivelContexto::Medio
     } else {
         NivelContexto::Alto
-    }
-}
-
-/// 200000 -> "200 k", 1000000 -> "1 M".
-#[allow(dead_code)]
-pub fn nombre_ctx(v: u64) -> String {
-    if v % 1_000_000 == 0 {
-        format!("{} M", v / 1_000_000)
-    } else {
-        format!("{} k", v / 1000)
     }
 }
 

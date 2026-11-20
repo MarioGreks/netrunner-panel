@@ -668,14 +668,8 @@ fn graph(app: &AppHandle, cuenta_id: &str, post: bool, ruta: &str, cuerpo: Optio
     Err(ErrorMs::otro("Microsoft Graph rechazó el token"))
 }
 
-#[allow(dead_code)]
 pub fn graph_get(app: &AppHandle, cuenta_id: &str, ruta: &str) -> Result<Value, ErrorMs> {
     graph(app, cuenta_id, false, ruta, None)
-}
-
-#[allow(dead_code)]
-pub fn graph_post(app: &AppHandle, cuenta_id: &str, ruta: &str, cuerpo: &Value) -> Result<Value, ErrorMs> {
-    graph(app, cuenta_id, true, ruta, Some(cuerpo))
 }
 
 // ---------------------------------------------------------------------------

@@ -157,36 +157,6 @@ fn mundo() -> Mundo {
 // ---------- piezas SVG ----------
 
 #[test]
-fn lienzo_svg_primitivas() {
-    let mut lz = LienzoSvg::new();
-    lz.create_rectangle([10.0, 20.0, 30.0, 50.0], "#fff", "", 1.0);
-    lz.create_oval([0.0, 0.0, 100.0, 100.0], "", "#000", 3.0);
-    lz.create_arc([0.0, 0.0, 100.0, 100.0], 90.0, -90.0, "arc", "", "#f00", 5.0, None); // horario desde las 12: acaba a las 3
-    lz.create_arc([0.0, 0.0, 100.0, 100.0], 90.0, 90.0, "pieslice", "#0f0", "", 1.0, None); // antihorario: acaba a las 9
-    lz.create_arc([0.0, 0.0, 100.0, 100.0], 0.0, -360.0, "arc", "", "#00f", 2.0, None);
-    lz.create_text(5.0, 6.0, "a <b> & \"c\"", "w", "#abc", (9.0, true), None);
-    lz.create_line(&[0.0, 0.0, 10.0, 10.0, 20.0, 0.0], "#123", 2.0, Some(&[3.0, 3.0]));
-    lz.create_polygon(&[0.0, 0.0, 5.0, 0.0, 5.0, 5.0], "#fa0", "", 1.0);
-    let v = lz.svg(120.0, 80.0, "Prueba");
-    assert!(v.starts_with("<svg") && v.ends_with("</svg>") && v.contains("viewBox=\"0 0 120 80\""));
-    assert!(v.contains("<rect x=\"10.0\" y=\"20.0\" width=\"20.0\" height=\"30.0\" fill=\"#fff\" stroke=\"none\"/>"));
-    assert!(v.contains("<ellipse cx=\"50.0\" cy=\"50.0\" rx=\"50.0\" ry=\"50.0\" fill=\"none\" stroke=\"#000\" stroke-width=\"3\"/>"));
-    assert!(v.contains("M 50.00 0.00 A 50.0 50.0 0 0 1 100.00 50.00"));
-    assert!(v.contains("M 50.0 50.0 L 50.00 0.00 A 50.0 50.0 0 0 0 0.00 50.00 Z"));
-    assert_eq!(v.matches("<ellipse").count(), 2);
-    assert!(v.contains("a &lt;b&gt; &amp; &quot;c&quot;") && v.contains("text-anchor=\"start\"") && v.contains("font-size=\"12.0\"") && v.contains("font-weight=\"bold\""));
-    assert!(v.contains("stroke-dasharray=\"3 3\"") && v.contains("<polyline points=\"0.0,0.0 10.0,10.0 20.0,0.0\""));
-    assert!(v.contains("<polygon points=\"0.0,0.0 5.0,0.0 5.0,5.0\" fill=\"#fa0\" stroke=\"none\"/>"));
-    // sin anchor: centrado (no «end», que «center» contiene una «e»)
-    let mut l2 = LienzoSvg::new();
-    l2.create_text(60.0, 40.0, "73%", "center", "#fff", (14.0, true), Some("#111"));
-    l2.create_text(60.0, 40.0, "x", "e", "#000", (9.0, false), None);
-    assert!(l2.svg(1.0, 1.0, "").contains("<text x=\"60.0\" y=\"40.0\" text-anchor=\"middle\" dominant-baseline=\"central\" fill=\"#fff\" font-size=\"18.7\" font-weight=\"bold\" stroke=\"#111\""));
-    assert_eq!(l2.partes[1].matches("text-anchor=\"end\"").count(), 1);
-    assert!(bien_formado(&v, true));
-}
-
-#[test]
 fn escapado_y_pasos() {
     assert_eq!(esc("<a href=\"x\">&'"), "&lt;a href=&quot;x&quot;&gt;&amp;&#x27;");
     assert!(cerca(paso_eje(0.0, 6.0), 1.0) && cerca(paso_eje(30.0, 6.0), 5.0) && cerca(paso_eje(0.45, 6.0), 0.1));

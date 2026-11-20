@@ -183,17 +183,22 @@ fn avisos() {
 fn apuntar_y_guardar() {
     let d = carpeta("apuntar");
     let ruta = d.join("h.json");
+    // un solo equipo: el historial fusionado es el propio
+    let ap = |h: &mut Vec<Muestra>, v: Option<&Ventana>, ahora: f64, retener: f64| {
+        let todas = h.clone();
+        apuntar_con(h, &todas, v, ahora, retener)
+    };
     let mut h = Vec::new();
-    assert!(apuntar(&mut h, Some(&ven(5.0, 2e9)), 1000.0, 10.0));
+    assert!(ap(&mut h, Some(&ven(5.0, 2e9)), 1000.0, 10.0));
     assert_eq!(h, vec![(1000.0, 2e9, 5.0)]);
     // sin cambio de reset ni de %: no se apunta; con cambio, sí
-    assert!(!apuntar(&mut h, Some(&ven(5.0, 2e9)), 1005.0, 10.0));
-    assert!(apuntar(&mut h, Some(&ven(6.0, 2e9)), 1005.0, 10.0));
+    assert!(!ap(&mut h, Some(&ven(5.0, 2e9)), 1005.0, 10.0));
+    assert!(ap(&mut h, Some(&ven(6.0, 2e9)), 1005.0, 10.0));
     // una ventana vencida o sin dato no se apunta
-    assert!(!apuntar(&mut h, Some(&ven(7.0, 900.0)), 1010.0, 10.0));
-    assert!(!apuntar(&mut h, None, 1010.0, 10.0));
+    assert!(!ap(&mut h, Some(&ven(7.0, 900.0)), 1010.0, 10.0));
+    assert!(!ap(&mut h, None, 1010.0, 10.0));
     // la retención descarta lo viejo
-    assert!(apuntar(&mut h, Some(&ven(9.0, 2e9)), 1010.0, 7.0));
+    assert!(ap(&mut h, Some(&ven(9.0, 2e9)), 1010.0, 7.0));
     assert_eq!(h, vec![(1005.0, 2e9, 6.0), (1010.0, 2e9, 9.0)]);
     let mut h = vec![(1000.0, 2e9, 5.0)];
     guardar_hist(&ruta, &h).unwrap();

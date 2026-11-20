@@ -257,32 +257,12 @@ fn ruta(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_data_dir().ok().map(|d| d.join(ARCHIVO))
 }
 
-fn escribir_atomico(ruta: &Path, lista: &[Acceso]) -> Result<(), String> {
-    let dir = ruta.parent().ok_or("ruta sin carpeta")?;
-    std::fs::create_dir_all(dir).map_err(|e| format!("no se pudo crear la carpeta: {e}"))?;
-    let json = serde_json::to_string_pretty(lista).map_err(|e| e.to_string())?;
-    let tmp = ruta.with_extension(format!("tmp{}", std::process::id()));
-    let res = std::fs::write(&tmp, json).and_then(|_| std::fs::rename(&tmp, ruta));
-    if let Err(e) = res {
-        let _ = std::fs::remove_file(&tmp);
-        return Err(format!("no se pudo escribir: {e}"));
-    }
-    Ok(())
-}
-
+/// Carga los accesos ordenados; si el archivo está corrupto, lo aparta como
+/// `accesos.corrupto.json`; si no se puede leer, queda protegido contra sobrescritura.
 fn cargar(app: &AppHandle) -> Vec<Acceso> {
-    let Some(r) = ruta(app) else { return vec![] };
-    let Ok(texto) = std::fs::read_to_string(&r) else { return vec![] };
-    match serde_json::from_str::<Vec<Acceso>>(&texto) {
-        Ok(mut l) => {
-            l.sort_by_key(|a| a.orden);
-            l
-        }
-        Err(_) => {
-            let _ = std::fs::rename(&r, r.with_file_name("accesos.corrupto.json"));
-            vec![]
-        }
-    }
+    let mut l: Vec<Acceso> = ruta(app).and_then(|r| crate::sync::cargar_json(&r)).unwrap_or_default();
+    l.sort_by_key(|a| a.orden);
+    l
 }
 
 /// Aplica un cambio, lo guarda y emite el estado. Si no se puede guardar, no se aplica.
@@ -295,7 +275,7 @@ fn modificar<R>(app: &AppHandle, cambio: impl FnOnce(&mut Vec<Acceso>) -> Result
         a.orden = i as i64;
     }
     if let Some(p) = ruta(app) {
-        escribir_atomico(&p, &copia)?;
+        crate::sync::escribir_atomico(&p, &copia)?;
     }
     *l = copia.clone();
     drop(l);

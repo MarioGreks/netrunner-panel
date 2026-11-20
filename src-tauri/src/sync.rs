@@ -62,8 +62,43 @@ pub fn fusionar_lista<T: Clone>(
     resultado
 }
 
+// Rutas locales que no se pudieron leer al arrancar: no se sobrescriben en esta ejecución.
+static BLOQUEADAS: std::sync::Mutex<Vec<PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+/// Carga un JSON local. No existe: `None`. Ilegible tras 3 intentos: `None` y la ruta
+/// queda bloqueada para escritura. Corrupto: se aparta como `<nombre>.corrupto.json` y `None`.
+pub fn cargar_json<T: DeserializeOwned>(ruta: &Path) -> Option<T> {
+    let mut intento = 1;
+    let texto = loop {
+        match std::fs::read_to_string(ruta) {
+            Ok(t) => break t,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+            Err(_) if intento < 3 => {
+                intento += 1;
+                std::thread::sleep(std::time::Duration::from_millis(200));
+            }
+            Err(_) => {
+                BLOQUEADAS.lock().unwrap().push(ruta.to_path_buf());
+                eprintln!("No se pudo leer {}", ruta.display());
+                return None;
+            }
+        }
+    };
+    match serde_json::from_str(&texto) {
+        Ok(v) => Some(v),
+        Err(_) => {
+            let _ = std::fs::rename(ruta, ruta.with_extension("corrupto.json"));
+            None
+        }
+    }
+}
+
 /// Escribe en un archivo temporal contiguo y lo renombra sobre el destino.
 pub fn escribir_atomico<T: Serialize + ?Sized>(ruta: &Path, datos: &T) -> Result<(), String> {
+    if BLOQUEADAS.lock().unwrap().iter().any(|b| b == ruta) {
+        let nombre = ruta.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+        return Err(format!("no se pudo leer {nombre} al arrancar; reinicia la app para no perder datos"));
+    }
     let dir = ruta.parent().ok_or("ruta sin carpeta")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("no se pudo crear la carpeta: {e}"))?;
     let json = serde_json::to_string_pretty(datos).map_err(|e| e.to_string())?;
@@ -126,4 +161,57 @@ pub fn ejecutar_pasos(pasos: Vec<Paso>) -> (usize, Vec<String>) {
         }
     }
     (bien, errores)
+}
+
+#[cfg(test)]
+mod pruebas {
+    use super::*;
+    use serde_json::{json, Value};
+
+    fn carpeta(nombre: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("nr_sync_{nombre}_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn cargar_json_inexistente_no_bloquea() {
+        let d = carpeta("noexiste");
+        let r = d.join("a.json");
+        assert!(cargar_json::<Value>(&r).is_none());
+        escribir_atomico(&r, &json!({"a": 1})).unwrap();
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn cargar_json_corrupto_se_aparta() {
+        let d = carpeta("corrupto");
+        let r = d.join("b.json");
+        std::fs::write(&r, "{ roto").unwrap();
+        assert!(cargar_json::<Value>(&r).is_none());
+        assert!(d.join("b.corrupto.json").exists());
+        assert!(!r.exists());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn cargar_json_ilegible_bloquea_escritura() {
+        let d = carpeta("ilegible");
+        let r = d.join("x.json");
+        std::fs::create_dir(&r).unwrap();
+        assert!(cargar_json::<Value>(&r).is_none());
+        let e = escribir_atomico(&r, &json!({})).unwrap_err();
+        assert!(e.contains("reinicia"), "{e}");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn cargar_json_valido() {
+        let d = carpeta("valido");
+        let r = d.join("c.json");
+        std::fs::write(&r, r#"{"a":1}"#).unwrap();
+        assert_eq!(cargar_json::<Value>(&r), Some(json!({"a": 1})));
+        let _ = std::fs::remove_dir_all(&d);
+    }
 }

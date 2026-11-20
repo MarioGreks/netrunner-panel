@@ -41,16 +41,10 @@ fn ruta(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_data_dir().ok().map(|d| d.join(ARCHIVO))
 }
 
+/// Carga el archivo; si está corrupto, lo aparta como `interfaz.corrupto.json`; si no se
+/// puede leer, queda protegido contra sobrescritura (ver `sync::cargar_json`).
 fn cargar(app: &AppHandle) -> Interfaz {
-    let Some(r) = ruta(app) else { return Interfaz::default() };
-    let Ok(texto) = std::fs::read_to_string(&r) else { return Interfaz::default() };
-    match serde_json::from_str::<Interfaz>(&texto) {
-        Ok(i) => i,
-        Err(_) => {
-            let _ = std::fs::rename(&r, r.with_file_name("interfaz.corrupto.json"));
-            Interfaz::default()
-        }
-    }
+    ruta(app).and_then(|r| sync::cargar_json(&r)).unwrap_or_default()
 }
 
 /// Paso de la sincronización entre equipos (lo llama el planificador de `notas`).

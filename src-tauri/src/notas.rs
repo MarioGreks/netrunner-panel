@@ -128,17 +128,10 @@ fn ruta_local(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_data_dir().ok().map(|d| d.join(ARCHIVO))
 }
 
-/// Carga el almacén local. Si está corrupto, lo aparta como `notas.corrupto.json`.
+/// Carga el almacén local. Si está corrupto, lo aparta como `notas.corrupto.json`; si no
+/// se puede leer, queda protegido contra sobrescritura (ver `sync::cargar_json`).
 fn cargar_local(app: &AppHandle) -> Datos {
-    let Some(r) = ruta_local(app) else { return Datos::default() };
-    let Ok(texto) = std::fs::read_to_string(&r) else { return Datos::default() };
-    match serde_json::from_str::<Datos>(&texto) {
-        Ok(d) => d,
-        Err(_) => {
-            let _ = std::fs::rename(&r, r.with_file_name("notas.corrupto.json"));
-            Datos::default()
-        }
-    }
+    ruta_local(app).and_then(|r| sync::cargar_json(&r)).unwrap_or_default()
 }
 
 fn guardar_local(app: &AppHandle, datos: &Datos) -> Result<(), String> {

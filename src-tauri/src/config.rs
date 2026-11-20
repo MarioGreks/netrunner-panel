@@ -146,11 +146,11 @@ fn ruta(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_config_dir().ok().map(|d| d.join("config.json"))
 }
 
-/// Lee la configuración; si falta o está corrupta, usa los valores por defecto.
+/// Lee la configuración; si falta, usa los valores por defecto; si está corrupta, se
+/// aparta como `config.corrupto.json` y se usan los valores por defecto.
 pub fn cargar(app: &AppHandle) -> Config {
     ruta(app)
-        .and_then(|r| std::fs::read_to_string(r).ok())
-        .and_then(|s| serde_json::from_str::<Config>(&s).ok())
+        .and_then(|r| crate::sync::cargar_json::<Config>(&r))
         .map(|mut c| {
             c.normalizar();
             c
@@ -160,11 +160,7 @@ pub fn cargar(app: &AppHandle) -> Config {
 
 pub(crate) fn guardar(app: &AppHandle, config: &Config) -> Result<(), String> {
     let r = ruta(app).ok_or("sin directorio de configuración")?;
-    if let Some(dir) = r.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    std::fs::write(r, json).map_err(|e| e.to_string())
+    crate::sync::escribir_atomico(&r, config)
 }
 
 /// Cambia solo `borde_pausado` (lo usa el menú de la bandeja) y lo guarda.

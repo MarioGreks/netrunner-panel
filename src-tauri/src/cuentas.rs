@@ -184,20 +184,12 @@ fn ruta(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_data_dir().ok().map(|d| d.join(ARCHIVO))
 }
 
-/// Carga el archivo; si está corrupto, lo aparta como `cuentas.corrupto.json`.
+/// Carga el archivo; si está corrupto, lo aparta como `cuentas.corrupto.json`; si no se
+/// puede leer, queda protegido contra sobrescritura (ver `sync::cargar_json`).
 fn cargar(app: &AppHandle) -> Vec<Cuenta> {
-    let Some(r) = ruta(app) else { return vec![] };
-    let Ok(texto) = std::fs::read_to_string(&r) else { return vec![] };
-    match serde_json::from_str::<Vec<Cuenta>>(&texto) {
-        Ok(mut v) => {
-            migrar(&mut v);
-            v
-        }
-        Err(_) => {
-            let _ = std::fs::rename(&r, r.with_file_name("cuentas.corrupto.json"));
-            vec![]
-        }
-    }
+    let mut v: Vec<Cuenta> = ruta(app).and_then(|r| sync::cargar_json(&r)).unwrap_or_default();
+    migrar(&mut v);
+    v
 }
 
 /// Los archivos anteriores a la sincronización no tienen `modificada`: se usa `creada`.

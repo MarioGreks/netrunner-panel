@@ -48,6 +48,8 @@ pub fn run() {
             ventanas::abrir_ajustes_consumo,
             ventanas::estado_pantalla_completa,
             sistema::muestra_sistema,
+            sistema::historial_sistema,
+            sistema::procesos_sistema,
             calendario::estado_calendario,
             calendario::sincronizar_calendario,
             consumo::estado_consumo,

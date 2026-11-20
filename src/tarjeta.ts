@@ -9,6 +9,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { iniciarTema } from "./lib/tema";
 import { montarVentanaMeteo } from "./modulos/tiempo/ventana";
 import { montarVentanaNotas } from "./modulos/notas/ventana";
+import { montarVentanaSistema } from "./modulos/sistema/ventana";
 
 iniciarTema();
 
@@ -17,22 +18,10 @@ type Vista = (contenedor: HTMLElement) => void | (() => void | Promise<void>);
 
 const TITULOS: Record<string, string> = { meteo: "METEO", notas: "NOTAS", sistema: "SISTEMA" };
 
-/** Vista provisional: los encargos siguientes sustituyen la de cada tipo por la real. */
-const provisional =
-  (titulo: string): Vista =>
-  (cont) => {
-    cont.innerHTML = `
-      <section class="marco tv__marco">
-        <div class="marco__cabecera"><span></span><span class="marco__etiqueta">VENTANA</span></div>
-        <div class="marco__cuerpo tv__vacio">VISTA AMPLIADA EN CONSTRUCCIÓN</div>
-      </section>`;
-    cont.querySelector(".marco__cabecera span")!.textContent = titulo;
-  };
-
 const VISTAS: Record<string, Vista> = {
   meteo: montarVentanaMeteo,
   notas: montarVentanaNotas,
-  sistema: provisional("SISTEMA"),
+  sistema: montarVentanaSistema,
 };
 
 const tipo = new URLSearchParams(location.search).get("tipo") ?? "";

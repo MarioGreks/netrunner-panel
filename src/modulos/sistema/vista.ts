@@ -3,7 +3,7 @@ import { alEvento, muestraSistema, type MuestraSistema } from "../../lib/ipc";
 import { crearAnillo, crearOnda } from "../../ui/grafica";
 import { hacerDesacoplable } from "../../ui/desacoplar";
 
-const UMBRAL_ALTO = 90; // por encima, el valor se pinta en rojo
+export const UMBRAL_ALTO = 90; // por encima, el valor se pinta en rojo
 const SEGMENTOS_DISCO = 24;
 const GB = 1024 ** 3;
 

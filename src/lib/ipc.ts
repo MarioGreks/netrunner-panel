@@ -79,6 +79,26 @@ export interface MuestraSistema {
 
 export const muestraSistema = () => invoke<MuestraSistema>("muestra_sistema");
 
+/** Muestra compacta del historial de 10 minutos (t en ms desde la época Unix). */
+export interface PuntoHistorial {
+  t: number;
+  cpu: number;
+  ram_pct: number;
+  gpu: number | null;
+}
+
+/** Proceso, o grupo de procesos con el mismo nombre. `cpu` va normalizado al total de la máquina. */
+export interface Proceso {
+  nombre: string;
+  pid: number;
+  cuantos: number;
+  cpu: number;
+  memoria: number;
+}
+
+export const historialSistema = () => invoke<PuntoHistorial[]>("historial_sistema");
+export const procesosSistema = () => invoke<Proceso[]>("procesos_sistema");
+
 export interface EventoCalendario {
   /** Estable por ocurrencia: `uid|inicio UTC` */
   id: string;

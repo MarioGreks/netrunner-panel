@@ -1,0 +1,89 @@
+/* Vista ampliada de SISTEMA (tarjeta.html?tipo=sistema). Prefijo svm__. Solo tokens del tema. */
+
+.svm {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "hist hist"
+    "nuc  proc"
+    "res  proc";
+  gap: var(--esp-3);
+  min-height: 100%;
+  font-family: var(--fuente-datos);
+}
+.svm > .marco { min-width: 0; min-height: 0; }
+.svm__hist { grid-area: hist; }
+.svm__nuc { grid-area: nuc; }
+.svm__proc { grid-area: proc; }
+.svm__res { grid-area: res; }
+
+/* Una columna: el historial primero y los procesos con altura propia */
+.svm--una { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; grid-template-areas: "hist" "nuc" "proc" "res"; }
+
+/* Historial: una franja por serie */
+.svm__franja { display: flex; align-items: center; gap: var(--esp-3); height: 56px; margin-bottom: var(--esp-2); }
+.svm__lado { width: 84px; flex: none; display: flex; flex-direction: column; gap: var(--esp-1); }
+.svm__nombre { font-family: var(--fuente-titulo); font-size: var(--tam-xs); letter-spacing: 0.18em; color: var(--texto-tenue); }
+.svm__valor { font-size: var(--tam-l); font-weight: 700; line-height: 1; color: var(--texto); }
+.svm__valor--alto { color: var(--rojo); text-shadow: 0 0 10px var(--alerta-glow); }
+.svm__canvas { flex: 1; min-width: 0; height: 100%; display: block; border: 1px solid var(--linea-neutra); }
+.svm__eje {
+  display: flex;
+  justify-content: space-between;
+  margin-left: calc(84px + var(--esp-3));
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+
+/* Núcleos */
+.svm__nucleos { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: var(--esp-2); }
+.svm__nuc-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0 var(--esp-2);
+  padding: var(--esp-1) var(--esp-2);
+  border: 1px solid var(--amarillo-suave);
+  background: var(--velo-fino);
+}
+.svm__nuc-id { font-size: var(--tam-xs); letter-spacing: 0.1em; color: var(--texto-tenue); }
+.svm__nuc-val { font-size: var(--tam-s); text-align: right; color: var(--amarillo); }
+.svm__nuc-onda { grid-column: 1 / -1; width: 100%; height: 24px; display: block; }
+
+/* Procesos */
+.svm__tabla { width: 100%; border-collapse: collapse; font-size: var(--tam-s); }
+.svm__tabla th, .svm__tabla td { padding: var(--esp-1) var(--esp-2); text-align: left; white-space: nowrap; }
+.svm__tabla th { font-family: var(--fuente-titulo); font-size: var(--tam-xs); letter-spacing: 0.14em; color: var(--texto-tenue); font-weight: 400; }
+.svm__tabla tbody tr { border-top: 1px solid var(--linea-neutra); }
+.svm__orden {
+  all: unset;
+  cursor: pointer;
+  letter-spacing: inherit;
+  color: inherit;
+}
+.svm__orden:hover, .svm__orden:focus-visible { color: var(--amarillo); }
+.svm__orden--activo { color: var(--amarillo); }
+.svm__orden--activo::after { content: " ▾"; }
+.svm__pn { max-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; color: var(--texto); }
+.svm__x { color: var(--cian); font-size: var(--tam-xs); }
+.svm__mem { text-align: right; color: var(--amarillo); }
+.svm__cpu { display: inline-block; width: 44px; height: 4px; margin-right: var(--esp-2); vertical-align: middle; background: var(--velo); }
+.svm__cpu i { display: block; height: 100%; background: var(--amarillo); }
+.svm__vacio { text-align: center; letter-spacing: 0.2em; color: var(--amarillo-tenue); }
+
+/* Resumen */
+.svm__fila { display: flex; justify-content: space-between; gap: var(--esp-3); padding: var(--esp-1) 0; font-size: var(--tam-s); }
+.svm__fila span { letter-spacing: 0.12em; color: var(--texto-tenue); }
+.svm__fila b { color: var(--cian); font-weight: 400; }
+.svm__fila[hidden] { display: none; }
+.svm__discos { display: flex; flex-direction: column; gap: var(--esp-1); margin-top: var(--esp-2); }
+.svm__disco { display: grid; grid-template-columns: 2.5ch 1fr auto; align-items: center; gap: var(--esp-2); font-size: var(--tam-xs); color: var(--texto-tenue); }
+.svm__disco i { display: block; height: 3px; background: var(--velo); }
+.svm__disco u { display: block; height: 100%; background: var(--cian); }
+.svm__disco--lleno u { background: var(--rojo); }
+
+/* Con movimiento reducido no hay transiciones ni brillos animados en esta vista */
+@media (prefers-reduced-motion: reduce) {
+  .svm * { transition: none !important; animation: none !important; }
+}

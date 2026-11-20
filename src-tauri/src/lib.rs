@@ -126,9 +126,6 @@ pub fn run() {
             let cfg = config::cargar(&handle);
             config::sincronizar_autoarranque(&handle, cfg.autostart);
             app.manage(Estado::nuevo(cfg));
-            // Siempre arranca solo con la pestaña (con o sin --oculto)
-            ventanas::preparar(&handle);
-            tarjetas::iniciar(&handle);
             sistema::iniciar(&handle);
             cuentas::iniciar(&handle);
             interfaz::iniciar(&handle);
@@ -144,6 +141,15 @@ pub fn run() {
             outlook::iniciar(&handle);
             actualizador::iniciar(&handle);
             bandeja::crear(&handle)?;
+            // Las ventanas se crean aquí, con todo el estado ya registrado («create»: false en
+            // tauri.conf.json): si Tauri las creaba antes del setup, la interfaz compilada podía
+            // llamar a un comando (p. ej. estado_notas) antes del manage() y la app abortaba.
+            for config_ventana in &app.config().app.windows {
+                tauri::WebviewWindowBuilder::from_config(&handle, config_ventana)?.build()?;
+            }
+            // Siempre arranca solo con la pestaña (con o sin --oculto)
+            ventanas::preparar(&handle);
+            tarjetas::iniciar(&handle);
             ventanas::iniciar_deteccion(handle);
             Ok(())
         })

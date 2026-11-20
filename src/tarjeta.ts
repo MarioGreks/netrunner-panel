@@ -7,6 +7,7 @@ import "./styles/consumo-ventana.css";
 import "./styles/tarjeta.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { iniciarTema } from "./lib/tema";
+import { montarVentanaMeteo } from "./modulos/tiempo/ventana";
 
 iniciarTema();
 
@@ -27,7 +28,7 @@ const provisional =
   };
 
 const VISTAS: Record<string, Vista> = {
-  meteo: provisional("METEO"),
+  meteo: montarVentanaMeteo,
   notas: provisional("NOTAS"),
   sistema: provisional("SISTEMA"),
 };

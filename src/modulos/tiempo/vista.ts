@@ -26,14 +26,14 @@ import { iconoMeteo } from "../../lib/iconos-meteo";
 import { colorCategoria } from "../../lib/categorias";
 import { hacerDesacoplable, sustituirPorHueco } from "../../ui/desacoplar";
 
-const DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
+export const DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 const MESES_LARGOS = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 /** La agenda cubre unos 6 meses (igual que `DIAS_VENTANA` en calendario.rs) y se pinta de 14 en 14 días. */
 const DIAS_AGENDA = 183;
 const TANDA = 14;
-const dos = (n: number) => String(n).padStart(2, "0");
+export const dos = (n: number) => String(n).padStart(2, "0");
 
-const esc = (t: string) =>
+export const esc = (t: string) =>
   t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 const icono = iconoMeteo;
@@ -48,10 +48,10 @@ const marco = (titulo: string, cabeceraDer: string, cuerpo: string, extra: strin
   </section>`;
 
 // --- Utilidades de fechas ---
-const inicioDeDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-const mismoDia = (a: Date, b: Date) => inicioDeDia(a).getTime() === inicioDeDia(b).getTime();
-const hhmm = (d: Date) => `${dos(d.getHours())}:${dos(d.getMinutes())}`;
-const redondear = (n: number) => `${Math.round(n)}°`;
+export const inicioDeDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+export const mismoDia = (a: Date, b: Date) => inicioDeDia(a).getTime() === inicioDeDia(b).getTime();
+export const hhmm = (d: Date) => `${dos(d.getHours())}:${dos(d.getMinutes())}`;
+export const redondear = (n: number) => `${Math.round(n)}°`;
 
 const subtituloCategoria = (cats: string[]) =>
   cats.length
@@ -69,7 +69,7 @@ function restante(ms: number): string {
   return `${dos(m)}M`;
 }
 
-function hace(iso: string | null): string {
+export function hace(iso: string | null): string {
   if (!iso) return "SIN SINCRONIZAR";
   const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (min < 1) return "AHORA";
@@ -84,14 +84,14 @@ function etiquetaDia(d: Date, hoy: Date): string {
   return `${DIAS[d.getDay()].slice(0, 3)} ${d.getDate()}`;
 }
 
-interface Linea {
+export interface Linea {
   ev: EventoCalendario;
   inicio: Date;
   fin: Date;
 }
 
 /** Agrupa por día. Los eventos de día completo aparecen en cada día que cubren. */
-function agrupar(eventos: EventoCalendario[], ahora: Date): Map<number, Linea[]> {
+export function agrupar(eventos: EventoCalendario[], ahora: Date): Map<number, Linea[]> {
   const hoy = inicioDeDia(ahora).getTime();
   const limite = hoy + DIAS_AGENDA * 86400000;
   const grupos = new Map<number, Linea[]>();
@@ -117,17 +117,28 @@ function agrupar(eventos: EventoCalendario[], ahora: Date): Map<number, Linea[]>
 /** METEO plegada o desplegada. El estado vive en lib/interfaz (se guarda y se sincroniza entre equipos); esta copia es la del módulo. */
 let tiraAbierta = false;
 
-/** Gráfica de 24 h en SVG: temperatura (línea y relleno, primario), lluvia (barras, secundario),
- *  etiquetas cada 3 h y máxima y mínima marcadas. Los colores salen de clases CSS con variables
+/** Opciones de la gráfica horaria: el panel usa las de por defecto (24 h, 340×108, etiqueta cada 3 h);
+ *  la ventana METEO pasa el ancho real, una etiqueta cada 3 o 6 h y la línea de medianoche. */
+export interface OpcionesGrafica {
+  ancho?: number;
+  alto?: number;
+  cada?: number;
+  medianoche?: boolean;
+}
+
+/** Gráfica horaria en SVG: temperatura (línea y relleno, primario), lluvia (barras, secundario),
+ *  etiquetas cada `cada` h y máxima y mínima marcadas. Los colores salen de clases CSS con variables
  *  de tema, así que el cambio de tema no obliga a redibujar. */
-function grafica24h(horas: HoraMeteo[]): string {
-  const W = 340;
-  const H = 108;
+export function graficaHoras(horas: HoraMeteo[], op: OpcionesGrafica = {}): string {
+  const W = op.ancho ?? 340;
+  const H = op.alto ?? 108;
+  const cada = op.cada ?? 3;
   const PX = 14;
+  // El alto sobrante (ventana alta) se reparte: la base sigue 24 px sobre el borde inferior
+  const BASE = H - 24;
   const Y_ALTO = 24;
-  const Y_BAJO = 74;
-  const BASE = 84;
-  const BARRA_MAX = 28;
+  const Y_BAJO = BASE - 10;
+  const BARRA_MAX = 28 + Math.max(0, H - 108) * 0.35;
   const n = horas.length;
   if (n < 2) return `<div class="tmp__g-vacio">SIN DATOS HORARIOS</div>`;
   const x = (i: number) => PX + (i * (W - 2 * PX)) / (n - 1);
@@ -159,25 +170,38 @@ function grafica24h(horas: HoraMeteo[]): string {
     capas += marca(pMax, "MÁX", true);
     if (pMin.i !== pMax.i) capas += marca(pMin, "MÍN", false);
   }
+  const anchoBarra = op.ancho ? Math.max(2.6, Math.min(6, ((W - 2 * PX) / (n - 1)) * 0.55)) : 2.6;
   const barras = horas
     .map((h, i) => {
       const p = h.prob_lluvia ?? 0;
       if (p <= 0) return "";
       const alto = Math.max(1, (p / 100) * BARRA_MAX);
-      return `<rect class="tmp__g-barra" x="${(x(i) - 1.3).toFixed(1)}" y="${(BASE - alto).toFixed(1)}" width="2.6" height="${alto.toFixed(1)}"><title>${Math.round(p)}% de lluvia</title></rect>`;
+      return `<rect class="tmp__g-barra" x="${(x(i) - anchoBarra / 2).toFixed(1)}" y="${(BASE - alto).toFixed(1)}" width="${anchoBarra.toFixed(1)}" height="${alto.toFixed(1)}"><title>${Math.round(p)}% de lluvia</title></rect>`;
     })
     .join("");
   const etiquetas = horas
     .map((h, i) => {
       const hh = Number(h.hora.slice(11, 13));
-      return hh % 3 === 0
+      return hh % cada === 0
         ? `<text class="tmp__g-txt" x="${x(i).toFixed(1)}" y="${H - 4}" text-anchor="middle">${dos(hh)}h</text><line class="tmp__g-marca" x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${BASE}" y2="${BASE + 3}"/>`
         : "";
     })
     .join("");
-  return `<svg class="tmp__grafica" viewBox="0 0 ${W} ${H}" role="img" aria-label="Previsión de las próximas 24 horas">
+  // Medianoche: línea vertical con el nombre del día que empieza
+  const medianoche = op.medianoche
+    ? horas
+        .map((h, i) => {
+          if (i === 0 || h.hora.slice(11, 13) !== "00") return "";
+          const [y, mes, dia] = h.hora.slice(0, 10).split("-").map(Number);
+          const nombre = DIAS[new Date(y, mes - 1, dia).getDay()].slice(0, 3);
+          const px = x(i).toFixed(1);
+          return `<line class="tmp__g-medianoche" x1="${px}" x2="${px}" y1="10" y2="${BASE}"/><text class="tmp__g-txt tmp__g-txt--dia" x="${(x(i) + 3).toFixed(1)}" y="9">${nombre}</text>`;
+        })
+        .join("")
+    : "";
+  return `<svg class="tmp__grafica" viewBox="0 0 ${W} ${H}" role="img" aria-label="Previsión de las próximas ${n} horas">
     <line class="tmp__g-base" x1="${PX}" x2="${W - PX}" y1="${BASE}" y2="${BASE}"/>
-    ${barras}${capas}${etiquetas}
+    ${medianoche}${barras}${capas}${etiquetas}
   </svg>`;
 }
 
@@ -337,7 +361,7 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
       <div class="tmp__detalle">
         <div class="tmp__detalle-in">
           ${detalleActual}
-          ${grafica24h(m.por_horas ?? [])}
+          ${graficaHoras((m.por_horas ?? []).slice(0, 24))}
           <div class="tmp__dg-fila">${diasGrandes}</div>
         </div>
       </div>`;

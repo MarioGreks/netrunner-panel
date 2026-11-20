@@ -1,4 +1,4 @@
-//! Módulo METEO: tiempo actual y previsión de 5 días con Open-Meteo (sin clave).
+//! Módulo METEO: tiempo actual y previsión de 14 días con Open-Meteo (sin clave).
 //!
 //! Refresca cada 30 min y al guardar una ciudad nueva. El último resultado bueno
 //! se guarda en `app_data_dir()/meteo.json` y se emite `meteo://estado`.
@@ -28,6 +28,11 @@ pub struct Actual {
     pub es_de_dia: bool,
     pub texto: String,
     pub icono: String,
+    /// Grados (0 = norte, 90 = este): de dónde sopla el viento
+    #[serde(default)]
+    pub direccion_viento: Option<f64>,
+    #[serde(default)]
+    pub uv: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -40,9 +45,16 @@ pub struct Dia {
     pub prob_lluvia: Option<f64>,
     pub texto: String,
     pub icono: String,
+    /// AAAA-MM-DDTHH:MM, hora local de la ciudad
+    #[serde(default)]
+    pub salida_sol: Option<String>,
+    #[serde(default)]
+    pub puesta_sol: Option<String>,
+    #[serde(default)]
+    pub uv_max: Option<f64>,
 }
 
-/// Una hora de la previsión (las próximas 24 desde la actual).
+/// Una hora de la previsión (las próximas 48 desde la actual).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Hora {
     /// AAAA-MM-DDTHH:MM, en la hora local de la ciudad
@@ -57,7 +69,7 @@ pub struct EstadoMeteo {
     pub ciudad: Option<Ciudad>,
     pub actual: Option<Actual>,
     pub dias: Vec<Dia>,
-    /// Próximas 24 horas; vacío en la caché antigua.
+    /// Próximas 48 horas (el panel usa solo las 24 primeras); vacío en la caché antigua.
     #[serde(default)]
     pub por_horas: Vec<Hora>,
     pub actualizado: Option<DateTime<Utc>>,
@@ -131,6 +143,10 @@ struct RespActual {
     weather_code: i32,
     wind_speed_10m: f64,
     is_day: i32,
+    #[serde(default)]
+    wind_direction_10m: Option<f64>,
+    #[serde(default)]
+    uv_index: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -140,6 +156,12 @@ struct RespDiario {
     temperature_2m_max: Vec<Option<f64>>,
     temperature_2m_min: Vec<Option<f64>>,
     precipitation_probability_max: Vec<Option<f64>>,
+    #[serde(default)]
+    sunrise: Vec<Option<String>>,
+    #[serde(default)]
+    sunset: Vec<Option<String>>,
+    #[serde(default)]
+    uv_index_max: Vec<Option<f64>>,
 }
 
 /// Interpreta la respuesta JSON de `/v1/forecast`.
@@ -158,6 +180,8 @@ pub fn interpretar_prevision(json: &str) -> Result<(Actual, Vec<Dia>), String> {
         es_de_dia,
         texto: texto.to_string(),
         icono: icono.to_string(),
+        direccion_viento: c.wind_direction_10m,
+        uv: c.uv_index,
     };
     let mut dias = Vec::new();
     if let Some(d) = r.daily {
@@ -172,13 +196,16 @@ pub fn interpretar_prevision(json: &str) -> Result<(Actual, Vec<Dia>), String> {
                 prob_lluvia: d.precipitation_probability_max.get(i).copied().flatten(),
                 texto: texto.to_string(),
                 icono: icono.to_string(),
+                salida_sol: d.sunrise.get(i).cloned().flatten(),
+                puesta_sol: d.sunset.get(i).cloned().flatten(),
+                uv_max: d.uv_index_max.get(i).copied().flatten(),
             });
         }
     }
     Ok((actual, dias))
 }
 
-/// Las próximas 24 horas desde la hora actual (`current.time`, local de la ciudad).
+/// Las próximas 48 horas desde la hora actual (`current.time`, local de la ciudad).
 /// Sin `hourly` devuelve una lista vacía; sin hora actual parte del principio.
 pub fn interpretar_horas(json: &str) -> Vec<Hora> {
     let Ok(r) = serde_json::from_str::<RespPrevision>(json) else {
@@ -197,7 +224,7 @@ pub fn interpretar_horas(json: &str) -> Vec<Hora> {
         .iter()
         .enumerate()
         .filter(|(_, t)| t.chars().take(13).collect::<String>() >= desde)
-        .take(24)
+        .take(48)
         .map(|(i, t)| Hora {
             hora: t.clone(),
             temperatura: h.temperature_2m.get(i).copied().flatten(),
@@ -272,15 +299,15 @@ fn descargar_prevision(c: &Ciudad) -> Result<(Actual, Vec<Dia>, Vec<Hora>), Stri
             ("longitude", c.longitud.to_string()),
             (
                 "current",
-                "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day".into(),
+                "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,wind_speed_10m,is_day,wind_direction_10m,uv_index".into(),
             ),
             (
                 "daily",
-                "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max".into(),
+                "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max".into(),
             ),
             ("hourly", "temperature_2m,precipitation_probability,weather_code".into()),
             ("timezone", "auto".into()),
-            ("forecast_days", "5".into()),
+            ("forecast_days", "14".into()),
         ],
     )?;
     let (actual, dias) = interpretar_prevision(&json)?;
@@ -436,10 +463,12 @@ mod pruebas {
       "latitude": 40.4, "longitude": -3.7, "timezone": "Europe/Madrid",
       "current": {"time": "2026-11-16T12:00", "interval": 900, "temperature_2m": 11.4,
         "apparent_temperature": 9.8, "relative_humidity_2m": 72, "weather_code": 61,
-        "wind_speed_10m": 14.2, "is_day": 1},
+        "wind_speed_10m": 14.2, "is_day": 1, "wind_direction_10m": 225, "uv_index": 3.5},
       "daily": {"time": ["2026-11-16","2026-11-17"], "weather_code": [61, 0],
         "temperature_2m_max": [13.1, 15.0], "temperature_2m_min": [6.2, null],
-        "precipitation_probability_max": [80, 5]}
+        "precipitation_probability_max": [80, 5],
+        "sunrise": ["2026-11-16T07:40", "2026-11-17T07:41"], "sunset": ["2026-11-16T17:50", null],
+        "uv_index_max": [2.1, 2.3]}
     }"#;
 
     #[test]
@@ -453,16 +482,35 @@ mod pruebas {
         assert_eq!(dias[0].prob_lluvia, Some(80.0));
         assert_eq!(dias[1].minima, None);
         assert_eq!(dias[1].icono, "sol");
+        assert_eq!(a.direccion_viento, Some(225.0));
+        assert_eq!(a.uv, Some(3.5));
+        assert_eq!(dias[0].salida_sol.as_deref(), Some("2026-11-16T07:40"));
+        assert_eq!(dias[1].puesta_sol, None);
+        assert_eq!(dias[1].uv_max, Some(2.3));
         assert!(interpretar_prevision("{}").is_err());
     }
 
     #[test]
-    fn lee_las_proximas_24_horas() {
-        // 48 horas desde el 16 a las 00:00; el actual es las 12:15
-        let horas: Vec<String> = (0..48)
+    fn la_prevision_sin_campos_nuevos_sigue_valiendo() {
+        let json = r#"{"current": {"temperature_2m": 1.0, "apparent_temperature": 0.0,
+          "relative_humidity_2m": 50, "weather_code": 0, "wind_speed_10m": 2.0, "is_day": 0},
+          "daily": {"time": ["2026-11-16"], "weather_code": [0], "temperature_2m_max": [3.0],
+          "temperature_2m_min": [-1.0], "precipitation_probability_max": [0]}}"#;
+        let (a, dias) = interpretar_prevision(json).unwrap();
+        assert_eq!((a.direccion_viento, a.uv), (None, None));
+        assert_eq!((dias[0].salida_sol.clone(), dias[0].puesta_sol.clone(), dias[0].uv_max), (None, None, None));
+        // Un Dia guardado en la caché antigua también se lee
+        let d: Dia = serde_json::from_str(r#"{"fecha":"2026-11-16","codigo":0,"maxima":1.0,"minima":0.0,"prob_lluvia":null,"texto":"x","icono":"sol"}"#).unwrap();
+        assert!(d.salida_sol.is_none() && d.uv_max.is_none());
+    }
+
+    #[test]
+    fn lee_las_proximas_48_horas() {
+        // 96 horas desde el 16 a las 00:00; el actual es las 12:15
+        let horas: Vec<String> = (0..96)
             .map(|i| format!("\"2026-11-{:02}T{:02}:00\"", 16 + i / 24, i % 24))
             .collect();
-        let temps: Vec<String> = (0..48).map(|i| if i == 13 { "null".into() } else { format!("{}.5", i) }).collect();
+        let temps: Vec<String> = (0..96).map(|i| if i == 13 { "null".into() } else { format!("{}.5", i) }).collect();
         let json = format!(
             r#"{{"current": {{"time": "2026-11-16T12:15", "temperature_2m": 11.0,
               "apparent_temperature": 9.0, "relative_humidity_2m": 70, "weather_code": 3,
@@ -471,17 +519,18 @@ mod pruebas {
               "precipitation_probability": [{}], "weather_code": [{}]}}}}"#,
             horas.join(","),
             temps.join(","),
-            vec!["40"; 48].join(","),
-            vec!["61"; 48].join(","),
+            vec!["40"; 96].join(","),
+            vec!["61"; 96].join(","),
         );
         let h = interpretar_horas(&json);
-        assert_eq!(h.len(), 24);
+        assert_eq!(h.len(), 48);
         assert_eq!(h[0].hora, "2026-11-16T12:00");
         assert_eq!(h[0].temperatura, Some(12.5));
         assert_eq!(h[1].temperatura, None);
         assert_eq!(h[0].prob_lluvia, Some(40.0));
         assert_eq!(h[0].codigo, 61);
         assert_eq!(h[23].hora, "2026-11-17T11:00");
+        assert_eq!(h[47].hora, "2026-11-18T11:00");
         // Sin `hourly` (o con la caché antigua) no hay horas
         assert!(interpretar_horas(PREVISION).is_empty());
         // La caché antigua, sin `por_horas`, sigue leyéndose

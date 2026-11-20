@@ -135,6 +135,9 @@ export interface ActualMeteo {
   es_de_dia: boolean;
   texto: string;
   icono: string;
+  /** Grados (0 = norte): de dónde sopla. Ausente en una caché antigua. */
+  direccion_viento?: number | null;
+  uv?: number | null;
 }
 
 export interface DiaMeteo {
@@ -145,6 +148,10 @@ export interface DiaMeteo {
   prob_lluvia: number | null;
   texto: string;
   icono: string;
+  /** AAAA-MM-DDTHH:MM, hora local de la ciudad (ausentes en una caché antigua) */
+  salida_sol?: string | null;
+  puesta_sol?: string | null;
+  uv_max?: number | null;
 }
 
 export interface HoraMeteo {
@@ -159,7 +166,7 @@ export interface EstadoMeteo {
   ciudad: Ciudad | null;
   actual: ActualMeteo | null;
   dias: DiaMeteo[];
-  /** Próximas 24 horas (vacío con una caché antigua) */
+  /** Próximas 48 horas (vacío con una caché antigua); el panel usa solo las 24 primeras */
   por_horas?: HoraMeteo[];
   actualizado: string | null;
   cargando: boolean;

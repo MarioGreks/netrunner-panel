@@ -86,3 +86,16 @@
     to bottom, var(--velo-fino) 0 1px, transparent 1px 3px
   );
 }
+
+/* Anillo segmentado (ui/grafica.ts). Aquí y no en sistema.css porque también lo usan CONSUMO y
+   su ventana flotante, que no cargan sistema.css (sin estas reglas los segmentos salían negros). */
+.anillo { display: block; flex: none; }
+.anillo__seg { fill: var(--color-anillo, var(--cian)); }
+.anillo__valor {
+  font-family: var(--fuente-datos);
+  font-weight: 700;
+  font-size: 18px;
+  fill: var(--texto);
+}
+.anillo__marca { stroke: var(--texto); stroke-width: 2; stroke-linecap: butt; }
+.anillo--nd .anillo__valor { font-size: 14px; fill: var(--texto-tenue); }

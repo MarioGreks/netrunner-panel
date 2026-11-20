@@ -683,14 +683,11 @@ pub fn graph_post(app: &AppHandle, cuenta_id: &str, ruta: &str, cuerpo: &Value) 
 // ---------------------------------------------------------------------------
 
 fn abrir_navegador(url: &str) -> Result<(), ErrorMs> {
-    use windows::core::{w, HSTRING, PCWSTR};
-    use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-    let h = unsafe { ShellExecuteW(None, w!("open"), &HSTRING::from(url), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL) };
-    if h.0 as isize <= 32 {
-        Err(ErrorMs::otro("No se pudo abrir el navegador"))
-    } else {
+    if crate::accesos::shell_execute(&windows::core::HSTRING::from(url), SW_SHOWNORMAL) {
         Ok(())
+    } else {
+        Err(ErrorMs::otro("No se pudo abrir el navegador"))
     }
 }
 

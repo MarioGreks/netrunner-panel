@@ -33,7 +33,6 @@ use windows::Win32::System::Variant::{
     VariantClear, VARIANT, VARIANT_0_0, VARIANT_0_0_0, VT_BOOL, VT_BSTR, VT_DATE, VT_DISPATCH, VT_I2, VT_I4, VT_R4,
     VT_R8, VT_UI4,
 };
-use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{AllowSetForegroundWindow, ASFW_ANY, SW_SHOWMINNOACTIVE};
 
 use crate::calendario::Evento;
@@ -749,11 +748,7 @@ fn ruta_outlook() -> Option<PathBuf> {
 /// Lanza `OUTLOOK.EXE` minimizado y sin darle el foco.
 fn lanzar_outlook() -> Result<(), String> {
     let ruta = ruta_outlook().ok_or("No se encontró el Outlook clásico")?;
-    // SAFETY: ShellExecuteW con cadenas que viven durante la llamada.
-    let h = unsafe {
-        ShellExecuteW(None, w!("open"), &HSTRING::from(ruta.as_os_str()), PCWSTR::null(), PCWSTR::null(), SW_SHOWMINNOACTIVE)
-    };
-    if h.0 as isize > 32 {
+    if crate::accesos::shell_execute(&HSTRING::from(ruta.as_os_str()), SW_SHOWMINNOACTIVE) {
         Ok(())
     } else {
         Err("No se pudo abrir el Outlook clásico".into())

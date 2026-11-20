@@ -93,17 +93,21 @@ pub fn cargar_json<T: DeserializeOwned>(ruta: &Path) -> Option<T> {
     }
 }
 
-/// Escribe en un archivo temporal contiguo y lo renombra sobre el destino.
+/// Serializa `datos` (con sangría) y los escribe de forma atómica.
 pub fn escribir_atomico<T: Serialize + ?Sized>(ruta: &Path, datos: &T) -> Result<(), String> {
+    escribir_texto_atomico(ruta, &serde_json::to_string_pretty(datos).map_err(|e| e.to_string())?)
+}
+
+/// Escribe `texto` en un archivo temporal contiguo y lo renombra sobre el destino.
+pub fn escribir_texto_atomico(ruta: &Path, texto: &str) -> Result<(), String> {
     if BLOQUEADAS.lock().unwrap().iter().any(|b| b == ruta) {
         let nombre = ruta.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         return Err(format!("no se pudo leer {nombre} al arrancar; reinicia la app para no perder datos"));
     }
     let dir = ruta.parent().ok_or("ruta sin carpeta")?;
     std::fs::create_dir_all(dir).map_err(|e| format!("no se pudo crear la carpeta: {e}"))?;
-    let json = serde_json::to_string_pretty(datos).map_err(|e| e.to_string())?;
     let tmp = ruta.with_extension(format!("tmp{}", std::process::id()));
-    let res = std::fs::write(&tmp, json).and_then(|_| std::fs::rename(&tmp, ruta));
+    let res = std::fs::write(&tmp, texto).and_then(|_| std::fs::rename(&tmp, ruta));
     if let Err(e) = res {
         let _ = std::fs::remove_file(&tmp);
         return Err(format!("no se pudo escribir: {e}"));

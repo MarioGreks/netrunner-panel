@@ -252,15 +252,8 @@ fn cargar(app: &AppHandle) -> Vec<Operacion> {
 
 fn guardar(app: &AppHandle, cola: &[Operacion]) {
     let Some(r) = ruta(app) else { return };
-    if let Some(dir) = r.parent() {
-        let _ = std::fs::create_dir_all(dir);
-    }
     let Ok(json) = serde_json::to_string(cola) else { return };
-    // Se escribe a un temporal y se renombra: un corte no deja el archivo a medias
-    let tmp = r.with_extension("json.tmp");
-    if std::fs::write(&tmp, json).is_ok() {
-        let _ = std::fs::rename(&tmp, &r);
-    }
+    let _ = crate::sync::escribir_texto_atomico(&r, &json);
 }
 
 pub fn iniciar(app: &AppHandle) {

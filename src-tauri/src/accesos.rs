@@ -25,7 +25,7 @@ use windows::Win32::UI::Shell::{
     IShellItemImageFactory, IShellLinkW, SHCreateItemFromParsingName, ShellExecuteW, ShellLink,
     SIIGBF_BIGGERSIZEOK, SIIGBF_ICONONLY, SLGP_RAWPATH,
 };
-use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+use windows::Win32::UI::WindowsAndMessaging::{SHOW_WINDOW_CMD, SW_SHOWNORMAL};
 
 use crate::ventanas;
 
@@ -358,20 +358,15 @@ pub fn reordenar_accesos(app: AppHandle, ids: Vec<String>) -> Result<(), String>
     })
 }
 
+/// Abre `objetivo` con el programa asociado. Éxito si ShellExecuteW devuelve más de 32.
+pub(crate) fn shell_execute(objetivo: &HSTRING, modo: SHOW_WINDOW_CMD) -> bool {
+    // SAFETY: ShellExecuteW con cadenas que viven durante la llamada.
+    let h = unsafe { ShellExecuteW(None, windows::core::w!("open"), objetivo, PCWSTR::null(), PCWSTR::null(), modo) };
+    h.0 as isize > 32
+}
+
 pub(crate) fn abrir_shell(objetivo: String) -> Result<(), String> {
-    let r = en_hilo_com(move || unsafe {
-        let h = ShellExecuteW(
-            None,
-            windows::core::w!("open"),
-            &HSTRING::from(objetivo),
-            PCWSTR::null(),
-            PCWSTR::null(),
-            SW_SHOWNORMAL,
-        );
-        // Éxito si el valor devuelto es mayor que 32
-        h.0 as isize > 32
-    })
-    .unwrap_or(false);
+    let r = en_hilo_com(move || shell_execute(&HSTRING::from(objetivo), SW_SHOWNORMAL)).unwrap_or(false);
     if r {
         Ok(())
     } else {

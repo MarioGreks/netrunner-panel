@@ -11,6 +11,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use super::mtime_s;
 use super::rutas::{cwd_de, leer_cola, primer_cwd, proyecto_repo, tiene_git, CacheRepos};
 use super::transcripciones::{carpeta_home, raiz_proyectos, LineaCruda};
 
@@ -99,13 +100,6 @@ pub fn contexto_de(ruta: &Path, cola: u64) -> u64 {
         return (u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens) as u64;
     }
     0
-}
-
-fn mtime_s(m: &std::fs::Metadata) -> f64 {
-    m.modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map_or(0.0, |d| d.as_secs_f64())
 }
 
 /// [(id, ruta)] de las sesiones con actividad en los últimos `viva` s, la más reciente primero.

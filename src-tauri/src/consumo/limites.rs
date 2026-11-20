@@ -2,13 +2,14 @@
 //! Funciones puras; solo se toca disco en leer/escribir los JSON, con la ruta recibida.
 
 use std::collections::HashSet;
-use std::fs;
 use std::io;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::{Local, TimeZone};
 use serde::Serialize;
 use serde_json::Value;
+
+use super::leer_json;
 
 /// Segundos de una semana y de un día.
 pub const SEMANA: f64 = 604_800.0;
@@ -113,11 +114,6 @@ pub struct EstadoVentana {
 
 // ---------- lectura y escritura de ficheros ----------
 
-fn leer_json(ruta: &Path) -> Option<Value> {
-    let texto = fs::read_to_string(ruta).ok()?;
-    serde_json::from_str(texto.trim_start_matches('\u{feff}')).ok()
-}
-
 fn ventana_de(v: &Value) -> Option<Ventana> {
     let o = v.as_object()?;
     if o.is_empty() {
@@ -188,13 +184,7 @@ pub fn guardar_hist(ruta: &Path, hist: &[Muestra]) -> io::Result<()> {
         .iter()
         .map(|m| Value::Array(vec![num(m.0), num(m.1), num(m.2)]))
         .collect();
-    let mut tmp = ruta.as_os_str().to_owned();
-    tmp.push(".tmp");
-    let tmp = PathBuf::from(tmp);
-    fs::write(&tmp, serde_json::to_vec(&v)?)?;
-    fs::rename(&tmp, ruta).inspect_err(|_| {
-        let _ = fs::remove_file(&tmp);
-    })
+    crate::sync::escribir_texto_atomico(ruta, &serde_json::to_string(&v)?).map_err(io::Error::other)
 }
 
 /// Muestra que habría que añadir (si cambió el reset o el % respecto a la última) o None.

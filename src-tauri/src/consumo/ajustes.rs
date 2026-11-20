@@ -22,7 +22,7 @@ use super::historico::PRECIO_EUR;
 use super::historico_vista::{limpiar_vista_historico, VistaHist};
 use super::limites::{avisos_nuevos, renovar_ventanas, Aviso, ClaveAviso, Uso};
 use super::vigilancia::Vigilancia;
-use super::{bloquear, vuelta, Consumo};
+use super::{bloquear, leer_json, vuelta, Consumo};
 
 pub const FICHERO_AJUSTES: &str = "consumo_ajustes.json";
 pub const FICHERO_AVISOS: &str = "consumo_avisos.json";
@@ -46,13 +46,6 @@ pub struct AjustesConsumo {
     pub carpeta_defecto: String,
 }
 
-fn leer_json(fichero: &Path) -> Value {
-    let Ok(t) = fs::read_to_string(fichero) else {
-        return Value::Null;
-    };
-    serde_json::from_str(t.trim_start_matches('\u{feff}')).unwrap_or(Value::Null)
-}
-
 /// `ctx_max` válido de un JSON de ajustes: un entero positivo; si no, el de por defecto.
 pub fn ctx_max_de(v: &Value) -> u64 {
     v.get("ctx_max").and_then(Value::as_u64).filter(|c| *c > 0).unwrap_or(CTX_MAX)
@@ -60,7 +53,7 @@ pub fn ctx_max_de(v: &Value) -> u64 {
 
 /// (ctx_max, avisos, gb_max) de `consumo_ajustes.json`, con los valores por defecto de Consumo.
 pub fn leer_ajustes(fichero: &Path) -> (u64, bool, f64) {
-    let v = leer_json(fichero);
+    let v = leer_json(fichero).unwrap_or(Value::Null);
     let avisos = v.get("avisos").and_then(Value::as_bool).unwrap_or(true);
     let gb = match v.get("gb_max").and_then(Value::as_f64) {
         Some(x) if x.is_finite() && x >= 0.0 => x.min(GB_TOPE),
@@ -73,7 +66,7 @@ pub fn leer_ajustes(fichero: &Path) -> (u64, bool, f64) {
 /// los que el Histórico pasa el % del límite a € de coste real; un valor que no sirve (no es un
 /// número, <= 0 o > 5.000) vale el de por defecto.
 pub fn leer_suscripcion(fichero: &Path) -> f64 {
-    let v = leer_json(fichero);
+    let v = leer_json(fichero).unwrap_or(Value::Null);
     match v.get("suscripcion_eur") {
         Some(x) if super::historico_vista::precio_valido(x) => x.as_f64().unwrap_or(PRECIO_EUR),
         _ => PRECIO_EUR,
@@ -83,7 +76,7 @@ pub fn leer_suscripcion(fichero: &Path) -> f64 {
 /// `suscripcion` de `consumo_ajustes.json` (solo lectura): los $ al mes con los que el resumen
 /// compara el coste a precio de API; un valor que no sirve (no es un número o < 0) vale 20.
 pub fn leer_suscripcion_usd(fichero: &Path) -> f64 {
-    let v = leer_json(fichero);
+    let v = leer_json(fichero).unwrap_or(Value::Null);
     match v.get("suscripcion").and_then(Value::as_f64) {
         Some(x) if x.is_finite() && x >= 0.0 => x,
         _ => 20.0,
@@ -94,7 +87,7 @@ pub fn leer_suscripcion_usd(fichero: &Path) -> f64 {
 /// (True) y de forma atómica. Un fichero que existe pero no es un objeto JSON no se toca.
 pub fn guardar_ajustes(fichero: &Path, ctx_max: u64, avisos: bool, gb_max: f64) -> io::Result<bool> {
     let existe = fichero.exists();
-    let mut mapa = match leer_json(fichero) {
+    let mut mapa = match leer_json(fichero).unwrap_or(Value::Null) {
         Value::Object(m) => m,
         Value::Null if !existe => Map::new(),
         _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "consumo_ajustes.json no es válido")),
@@ -117,7 +110,7 @@ pub fn guardar_ajustes(fichero: &Path, ctx_max: u64, avisos: bool, gb_max: f64) 
 /// El ajuste `historico_vista` (lo último que se vio en el Histórico), limpio y completo; sin
 /// fichero o roto vale lo de la primera vez.
 pub fn leer_vista_historico(fichero: &Path) -> VistaHist {
-    limpiar_vista_historico(leer_json(fichero).get("historico_vista").unwrap_or(&Value::Null))
+    limpiar_vista_historico(leer_json(fichero).unwrap_or(Value::Null).get("historico_vista").unwrap_or(&Value::Null))
 }
 
 /// Guarda la vista del Histórico en la clave `historico_vista`: lo que llega se mezcla sobre lo
@@ -126,7 +119,7 @@ pub fn leer_vista_historico(fichero: &Path) -> VistaHist {
 /// que existe pero no es un objeto JSON no se toca.
 pub fn guardar_vista_historico(fichero: &Path, vista: &Value) -> io::Result<bool> {
     let existe = fichero.exists();
-    let mut mapa = match leer_json(fichero) {
+    let mut mapa = match leer_json(fichero).unwrap_or(Value::Null) {
         Value::Object(m) => m,
         Value::Null if !existe => Map::new(),
         _ => return Err(io::Error::new(io::ErrorKind::InvalidData, "consumo_ajustes.json no es válido")),
@@ -157,7 +150,7 @@ pub fn guardar_vista_historico(fichero: &Path, vista: &Value) -> io::Result<bool
 
 /// Los avisos ya dados que aún valen (su ventana no se ha renovado).
 pub fn cargar_hechos(ruta: &Path, ahora: f64) -> HashSet<ClaveAviso> {
-    let Value::Array(lista) = leer_json(ruta) else {
+    let Value::Array(lista) = leer_json(ruta).unwrap_or(Value::Null) else {
         return HashSet::new();
     };
     lista

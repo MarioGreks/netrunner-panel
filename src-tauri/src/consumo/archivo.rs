@@ -23,12 +23,13 @@ use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use chrono::{Local, NaiveDate, TimeZone, Timelike};
 use serde_json::{Map, Value};
 
 use super::equipos::escribir_atomico;
+use super::{ahora_s, leer_json};
 use super::limites::{Muestra, SEMANA};
 use super::reparto::{CuboEq, Fila, OTROS};
 use super::transcripciones::{Clave, Cubo, CUBO};
@@ -81,10 +82,6 @@ pub fn fecha_iso(s: &str) -> Option<NaiveDate> {
 fn dia_hora(t: f64) -> (String, usize) {
     let l = local(t);
     (iso(l.date_naive()), l.hour() as usize)
-}
-
-fn ahora_s() -> f64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64())
 }
 
 /// `round(x, n)` de Python (aproximado: x·10ⁿ redondeado).
@@ -426,11 +423,6 @@ fn dias_filas_json(v: &Value) -> Option<(usize, usize)> {
         filas += dia.get("f")?.as_array()?.len();
     }
     Some((d.len(), filas))
-}
-
-fn leer_json(ruta: &Path) -> Option<Value> {
-    let t = fs::read_to_string(ruta).ok()?;
-    serde_json::from_str(t.trim_start_matches('\u{feff}')).ok()
 }
 
 /// True si `nuevo` hay que escribirlo en `carpeta`: no está o cambió lo que lleva (la hora de

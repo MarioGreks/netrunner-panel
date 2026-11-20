@@ -384,11 +384,7 @@ pub fn fusionar_hist<'a>(
 
 /// Escribe `nombre` en `carpeta` a un `.tmp` y lo renombra (no queda cortado si se cierra a medias).
 pub fn escribir_atomico(carpeta: &Path, nombre: &str, texto: &str) -> io::Result<()> {
-    let tmp = carpeta.join(format!("{nombre}.tmp"));
-    fs::write(&tmp, texto)?;
-    fs::rename(&tmp, carpeta.join(nombre)).inspect_err(|_| {
-        let _ = fs::remove_file(&tmp);
-    })
+    crate::sync::escribir_texto_atomico(&carpeta.join(nombre), texto).map_err(io::Error::other)
 }
 
 /// Qué pasó al intentar publicar.

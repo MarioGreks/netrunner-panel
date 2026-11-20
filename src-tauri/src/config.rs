@@ -263,21 +263,8 @@ pub fn abrir_carpeta_datos(app: AppHandle, abrir: bool) -> Result<String, String
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     if abrir {
-        use windows::core::{w, HSTRING, PCWSTR};
-        use windows::Win32::UI::Shell::ShellExecuteW;
         use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
-        let h = unsafe {
-            ShellExecuteW(
-                None,
-                w!("open"),
-                &HSTRING::from(dir.as_os_str()),
-                PCWSTR::null(),
-                PCWSTR::null(),
-                SW_SHOWNORMAL,
-            )
-        };
-        // Éxito si el valor devuelto es mayor que 32
-        if h.0 as isize <= 32 {
+        if !crate::accesos::shell_execute(&windows::core::HSTRING::from(dir.as_os_str()), SW_SHOWNORMAL) {
             return Err("No se pudo abrir la carpeta".into());
         }
     }

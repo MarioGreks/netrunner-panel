@@ -48,13 +48,14 @@ mod pruebas_plugin;
 mod pruebas_reparto;
 
 use std::ffi::OsStr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
+use serde_json::Value;
 use sysinfo::{ProcessesToUpdate, System};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -183,10 +184,23 @@ impl Consumo {
     }
 }
 
-fn ahora_s() -> f64 {
+pub(crate) fn ahora_s() -> f64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0.0, |d| d.as_secs_f64())
+}
+
+pub(crate) fn mtime_s(m: &std::fs::Metadata) -> f64 {
+    m.modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map_or(0.0, |d| d.as_secs_f64())
+}
+
+/// Lee un JSON quitando el BOM; `None` si no existe o no es JSON válido.
+pub(crate) fn leer_json(ruta: &Path) -> Option<Value> {
+    let t = std::fs::read_to_string(ruta).ok()?;
+    serde_json::from_str(t.trim_start_matches('\u{feff}')).ok()
 }
 
 fn mtime(ruta: &std::path::Path) -> Option<SystemTime> {

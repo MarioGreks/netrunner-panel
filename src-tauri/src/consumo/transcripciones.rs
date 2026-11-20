@@ -15,12 +15,12 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::DateTime;
 use serde::de::{self, Deserializer, IgnoredAny, MapAccess, SeqAccess, Visitor};
 use serde::Deserialize;
 
+use super::{ahora_s, mtime_s};
 use super::rutas::{buscar_cwd, proyecto_repo, tiene_git, CacheRepos};
 
 /// s: los mensajes se agrupan en cubos de 10 min (es lo que se publicará a los otros equipos).
@@ -397,19 +397,6 @@ pub fn leer_linea(linea: &str) -> Option<Leida> {
 }
 
 // --- El lector ---
-
-fn ahora_s() -> f64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0.0, |d| d.as_secs_f64())
-}
-
-fn mtime_s(m: &std::fs::Metadata) -> f64 {
-    m.modified()
-        .ok()
-        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-        .map_or(0.0, |d| d.as_secs_f64())
-}
 
 /// Carpeta de usuario (para no contar como repo la que tiene `.git` en el home).
 pub fn carpeta_home() -> String {

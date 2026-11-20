@@ -14,7 +14,8 @@ import {
   type Nota,
   type Tarea,
 } from "../../lib/ipc";
-import { dos, esc, hace, MARCA, NUBE, primeraLinea } from "./vista";
+import { dos, esc } from "../../lib/texto";
+import { hace, MARCA, NUBE, primeraLinea } from "./vista";
 
 const ANTIRREBOTE_MS = 800;
 /** Por debajo de este ancho la ventana pasa a una columna con la lista plegable. */

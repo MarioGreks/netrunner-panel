@@ -12,8 +12,8 @@ import {
   type PuntoHistorial,
 } from "../../lib/ipc";
 import { crearOnda, type Onda } from "../../ui/grafica";
-import { esc } from "../notas/vista";
-import { UMBRAL_ALTO } from "./vista";
+import { esc } from "../../lib/texto";
+import { gb, UMBRAL_ALTO } from "./vista";
 
 const MAX_PUNTOS = 600; // 10 min a una muestra por segundo (igual que el búfer del núcleo)
 const REFRESCO_PROCESOS_MS = 2000;
@@ -32,7 +32,6 @@ const valorDe = (p: PuntoHistorial, id: IdSerie): number | null =>
   id === "cpu" ? p.cpu : id === "ram" ? p.ram_pct : p.gpu;
 
 const memoria = (b: number) => (b >= GB ? `${(b / GB).toFixed(1)} GB` : `${Math.round(b / 1024 ** 2)} MB`);
-const gb = (b: number) => (b / GB).toFixed(1);
 
 export function montarVentanaSistema(cont: HTMLElement): () => void {
   cont.innerHTML = `

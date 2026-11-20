@@ -25,16 +25,14 @@ import { alCambiarTiraRemota, recordarTira, tiraAbiertaGuardada } from "../../li
 import { iconoMeteo } from "../../lib/iconos-meteo";
 import { colorCategoria } from "../../lib/categorias";
 import { hacerDesacoplable, sustituirPorHueco } from "../../ui/desacoplar";
+import { dos, esc } from "../../lib/texto";
 
 export const DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 const MESES_LARGOS = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
 /** La agenda cubre unos 6 meses (igual que `DIAS_VENTANA` en calendario.rs) y se pinta de 14 en 14 días. */
 const DIAS_AGENDA = 183;
 const TANDA = 14;
-export const dos = (n: number) => String(n).padStart(2, "0");
 
-export const esc = (t: string) =>
-  t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 const icono = iconoMeteo;
 

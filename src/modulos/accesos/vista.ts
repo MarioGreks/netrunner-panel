@@ -18,9 +18,8 @@ import {
   type TipoAcceso,
 } from "../../lib/ipc";
 import { bloqueo } from "../../lib/bloqueo";
+import { esc } from "../../lib/texto";
 
-const esc = (t: string) =>
-  t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 const SEGMENTOS = 28;
 

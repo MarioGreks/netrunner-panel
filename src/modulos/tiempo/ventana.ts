@@ -11,7 +11,8 @@ import {
 } from "../../lib/ipc";
 import { iconoMeteo } from "../../lib/iconos-meteo";
 import { colorCategoria } from "../../lib/categorias";
-import { agrupar, DIAS, dos, esc, graficaHoras, hace, hhmm, inicioDeDia, redondear, type Linea } from "./vista";
+import { dos, esc } from "../../lib/texto";
+import { agrupar, DIAS, graficaHoras, hace, hhmm, inicioDeDia, redondear, type Linea } from "./vista";
 
 const PUNTOS = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
 const DIAS_AGENDA_VENTANA = 7;

@@ -11,11 +11,8 @@ import {
   type MuestraSistema,
 } from "../lib/ipc";
 import { iconoMeteo } from "../lib/iconos-meteo";
+import { dos, esc, recortar } from "../lib/texto";
 
-const dos = (n: number) => String(n).padStart(2, "0");
-const esc = (t: string) =>
-  t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const recortar = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
 
 /** Evento en curso o, si no hay, el siguiente con hora; si no, uno de día completo de hoy. */
 export function proximo(eventos: EventoCalendario[], ahora: Date): EventoCalendario | null {

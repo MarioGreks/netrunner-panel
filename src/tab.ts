@@ -20,6 +20,7 @@ import {
 import { iconoMeteo } from "./lib/iconos-meteo";
 import { colorCategoria } from "./lib/categorias";
 import { proximo } from "./ui/resumen";
+import { dos, esc, recortar } from "./lib/texto";
 
 const DIAS = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"];
 const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
@@ -29,10 +30,6 @@ const ESPERA_HOVER = 300;
 /** Tras cerrarse el panel la ventana reaparece bajo el cursor: no se reabre por hover enseguida. */
 const GUARDA_CIERRE = 1200;
 
-const esc = (t: string) =>
-  t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const dos = (n: number) => String(n).padStart(2, "0");
-const recortar = (t: string, max: number) => (t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t);
 const inicioDeDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
 
 /** «23D 04H 12M»; sin días «04H 12M»; sin horas «12M». */

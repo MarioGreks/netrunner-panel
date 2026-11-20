@@ -22,6 +22,7 @@ import {
   type SesionContexto,
 } from "../../lib/ipc";
 import { abrirAjustes } from "../../lib/navegacion";
+import { hacerDesacoplable } from "../../ui/desacoplar";
 import { alCambiarVisibilidadPanel, panelVisible } from "../../lib/visibilidad";
 import {
   crearBloqueLimite,
@@ -69,6 +70,10 @@ export function montar(contenedor: HTMLElement): () => void {
     </div>`;
 
   const q = <T extends HTMLElement>(id: string) => contenedor.querySelector<T>(`[data-id="${id}"]`)!;
+  // LÍMITES y CONTEXTO abren la ventana de CONSUMO (sin hueco: el panel sigue igual)
+  contenedor.querySelectorAll<HTMLElement>(".con > .marco").forEach((t, i) => {
+    hacerDesacoplable(t, { tipo: "consumo", titulo: i === 0 ? "LÍMITES" : "CONTEXTO" });
+  });
   const movimientoReducido = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const bloqueSem = crearBloqueLimite(contenedor, "sem", 132, 48);

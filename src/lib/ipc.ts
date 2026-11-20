@@ -348,6 +348,8 @@ export type EventoPanel =
   | "consumo://ajustes"
   | "consumo://aviso"
   | "consumo://ventana"
+  | "tarjetas://cambio"
+  | "fantasma://titulo"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"
@@ -715,6 +717,22 @@ export const alDatosConsumo = (cb: (d: DatosDisco) => void) => alEvento<DatosDis
 
 /** Abre la ventana flotante con la información completa de Consumo (si ya está abierta, la trae al frente). */
 export const abrirVentanaConsumo = () => invoke<void>("abrir_ventana_consumo");
+// --- Tarjetas desacopladas (ventanas) ---
+export type TipoTarjeta = "meteo" | "notas" | "sistema";
+/** Abre la ventana de la tarjeta; x e y: posición física del cursor al soltar (el núcleo prefiere leer el cursor él mismo). */
+export const abrirTarjeta = (tipo: TipoTarjeta, x?: number, y?: number) => invoke<void>("abrir_tarjeta", { tipo, x, y });
+/** Tipos de tarjeta con ventana abierta. */
+export const tarjetasAbiertas = () => invoke<string[]>("tarjetas_abiertas");
+export const cerrarTarjeta = (tipo: TipoTarjeta) => invoke<void>("cerrar_tarjeta", { tipo });
+/** Mientras es true el panel no se cierra solo (arrastrando una tarjeta). */
+export const arrastreTarjeta = (activo: boolean) => invoke<void>("arrastre_tarjeta", { activo });
+/** Ventana fantasma que acompaña al cursor fuera del panel; ancho y alto lógicos. */
+export const fantasmaMostrar = (titulo: string, ancho: number, alto: number) =>
+  invoke<void>("fantasma_mostrar", { titulo, ancho, alto });
+/** Sin coordenadas, el núcleo usa la posición real del cursor. */
+export const fantasmaMover = () => invoke<void>("fantasma_mover");
+export const fantasmaOcultar = () => invoke<void>("fantasma_ocultar");
+
 /** El nombre de este equipo (el de sus ficheros), para marcarlo entre los de EQUIPOS. */
 export const equipoConsumo = () => invoke<string>("equipo_consumo");
 /** Abre el panel en AJUSTES → CONSUMO (como una apertura manual). */

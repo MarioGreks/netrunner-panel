@@ -15,6 +15,8 @@ export default defineConfig({
         aviso: resolve(import.meta.dirname, "aviso.html"),
         avisoConsumo: resolve(import.meta.dirname, "aviso-consumo.html"),
         consumo: resolve(import.meta.dirname, "consumo.html"),
+        tarjeta: resolve(import.meta.dirname, "tarjeta.html"),
+        fantasma: resolve(import.meta.dirname, "fantasma.html"),
       },
     },
   },

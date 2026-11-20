@@ -10,6 +10,7 @@ import "./styles/correo.css";
 import "./styles/formularios.css";
 import "./styles/consumo.css";
 import "./styles/ajustes.css";
+import "./styles/desacoplar.css";
 import { alEvento, estadoCorreo, obtenerConfig, ocultarPanel, type Borde, type EstadoCorreo } from "./lib/ipc";
 import { iniciarTema } from "./lib/tema";
 import { bloqueo } from "./lib/bloqueo";
@@ -18,6 +19,7 @@ import { cargarInterfaz, recordarPestana } from "./lib/interfaz";
 import { alAbrirAjustes, esSeccionAjustes, pedirIrAEvento, type SeccionAjustes } from "./lib/navegacion";
 import { fijarContador, montarPestanas } from "./ui/pestanas";
 import { montarEnlace } from "./ui/enlace";
+import { montarConHueco } from "./ui/desacoplar";
 import { montarResumen } from "./ui/resumen";
 import { getVersion } from "@tauri-apps/api/app";
 import { montar as montarSistema } from "./modulos/sistema/vista";
@@ -32,10 +34,11 @@ import { montar as montarAjustes } from "./modulos/ajustes/vista";
 type Modulo = (c: HTMLElement) => void | (() => void);
 
 const MODULOS: Record<string, Modulo> = {
-  sistema: montarSistema,
+  // Con su ventana abierta, toda la pestaña es un hueco «DESACOPLADO» y el módulo no se monta
+  sistema: (c) => montarConHueco(c, "sistema", "SISTEMA", montarSistema),
   tiempo: montarTiempo,
   correo: montarCorreo,
-  notas: montarNotas,
+  notas: (c) => montarConHueco(c, "notas", "NOTAS", montarNotas),
   accesos: montarAccesos,
   consumo: montarConsumo,
 };

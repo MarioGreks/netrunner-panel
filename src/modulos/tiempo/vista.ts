@@ -24,6 +24,7 @@ import { abrirAjustes, alIrAEvento, tomarEventoPendiente } from "../../lib/naveg
 import { alCambiarTiraRemota, recordarTira, tiraAbiertaGuardada } from "../../lib/interfaz";
 import { iconoMeteo } from "../../lib/iconos-meteo";
 import { colorCategoria } from "../../lib/categorias";
+import { hacerDesacoplable, sustituirPorHueco } from "../../ui/desacoplar";
 
 const DIAS = ["DOMINGO", "LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO"];
 const MESES_LARGOS = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
@@ -222,6 +223,9 @@ export function montar(contenedor: HTMLElement): void {
   const q = <T extends HTMLElement>(id: string) => contenedor.querySelector<T>(`[data-id="${id}"]`)!;
   const tira = q("meteo");
   const raiz = tira;
+  // La tira es la tarjeta METEO: se saca por su fila y, con su ventana abierta, deja un hueco
+  hacerDesacoplable(tira, { tipo: "meteo", titulo: "METEO", asa: ".tmp__t-fila" });
+  const quitarHueco = sustituirPorHueco(tira, "meteo", "METEO");
   const errorAgenda = q("agenda-error");
   const cuentasEl = q("cuentas");
   const avisoEl = q("aviso");
@@ -799,6 +803,7 @@ Actualizado ${hace(m.actualizado).toLowerCase()}` : ""}`
     clearInterval(intervalo);
     observador.disconnect();
     suscripciones.forEach((u) => u());
+    quitarHueco();
     clearTimeout(temporizadorAviso);
     clearTimeout(temporizadorDestello);
   };

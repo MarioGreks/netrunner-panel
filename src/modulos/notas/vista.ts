@@ -12,6 +12,7 @@ import {
   type Tarea,
 } from "../../lib/ipc";
 import { abrirAjustes } from "../../lib/navegacion";
+import { hacerDesacoplable } from "../../ui/desacoplar";
 
 const esc = (t: string) =>
   t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -160,6 +161,7 @@ export function montar(contenedor: HTMLElement): void {
           <div data-id="lista-tareas"></div>
         </div>
       </section>`;
+    hacerDesacoplable(raiz.querySelector<HTMLElement>(".marco")!, { tipo: "notas", titulo: "TAREAS" });
     const campo = raiz.querySelector<HTMLInputElement>('[data-id="nueva"]')!;
     campo.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
@@ -340,6 +342,7 @@ export function montar(contenedor: HTMLElement): void {
         </div>
         <div class="marco__cuerpo"><div data-id="lista-notas"></div></div>
       </section>`;
+    hacerDesacoplable(raiz.querySelector<HTMLElement>(".marco")!, { tipo: "notas", titulo: "NOTAS" });
     pintarListaNotas();
   };
 

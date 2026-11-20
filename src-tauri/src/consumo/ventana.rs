@@ -110,13 +110,14 @@ fn guardar(app: &AppHandle) {
 
 /// Antirrebote: como mucho un hilo vivo, que guarda cuando pasa 1 s sin cambios y termina.
 #[derive(Default)]
-struct Antirrebote {
+pub(crate) struct Antirrebote {
     ultimo: Mutex<Option<Instant>>,
     hilo: AtomicBool,
 }
 
 impl Antirrebote {
-    fn tocar(self: &Arc<Self>, app: &AppHandle) {
+    /// `guardar` es quien escribe: lo reutilizan otras ventanas con su propio fichero.
+    pub(crate) fn tocar(self: &Arc<Self>, app: &AppHandle, guardar: fn(&AppHandle)) {
         let mut g = self.ultimo.lock().unwrap_or_else(|e| e.into_inner());
         *g = Some(Instant::now());
         if self.hilo.swap(true, Ordering::SeqCst) {
@@ -143,7 +144,7 @@ impl Antirrebote {
     }
 
     /// Guarda ya lo pendiente (al cerrar).
-    fn volcar(&self, app: &AppHandle) {
+    pub(crate) fn volcar(&self, app: &AppHandle, guardar: fn(&AppHandle)) {
         let pendiente = self.ultimo.lock().unwrap_or_else(|e| e.into_inner()).take().is_some();
         if pendiente {
             guardar(app);
@@ -151,7 +152,7 @@ impl Antirrebote {
     }
 }
 
-fn monitores(app: &AppHandle) -> Vec<Rect> {
+pub(crate) fn monitores(app: &AppHandle) -> Vec<Rect> {
     app.available_monitors()
         .unwrap_or_default()
         .iter()
@@ -164,7 +165,7 @@ fn monitores(app: &AppHandle) -> Vec<Rect> {
         .collect()
 }
 
-fn traer_al_frente(v: &WebviewWindow) {
+pub(crate) fn traer_al_frente(v: &WebviewWindow) {
     if v.is_minimized().unwrap_or(false) {
         let _ = v.unminimize();
     }
@@ -210,7 +211,7 @@ pub async fn abrir_ventana_consumo(app: AppHandle) -> Result<(), String> {
     let app2 = app.clone();
     let minimizada = Arc::new(AtomicBool::new(false));
     v.on_window_event(move |e| match e {
-        WindowEvent::Moved(_) => rebote.tocar(&app2),
+        WindowEvent::Moved(_) => rebote.tocar(&app2, guardar),
         WindowEvent::Resized(_) => {
             // Minimizar también es un cambio de tamaño: se avisa del cambio de visibilidad
             if let Some(v) = app2.get_webview_window(ETIQUETA) {
@@ -219,9 +220,9 @@ pub async fn abrir_ventana_consumo(app: AppHandle) -> Result<(), String> {
                     avisar_visibilidad(&app2, !min);
                 }
             }
-            rebote.tocar(&app2);
+            rebote.tocar(&app2, guardar);
         }
-        WindowEvent::CloseRequested { .. } => rebote.volcar(&app2),
+        WindowEvent::CloseRequested { .. } => rebote.volcar(&app2, guardar),
         WindowEvent::Destroyed => {
             let _ = super::fijar_vista(&app2.state::<super::Detalle>(), "ventana", false);
         }

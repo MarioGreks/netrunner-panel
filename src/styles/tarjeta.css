@@ -1,0 +1,40 @@
+/* Ventana de tarjeta desacoplada: reutiliza la barra HUD de CONSUMO (consumo-ventana.css). */
+
+.tv {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  border: 1px solid var(--primario-tenue);
+}
+.tv__main { padding: var(--esp-4); overflow: auto; }
+.tv__marco { height: 100%; display: flex; flex-direction: column; }
+.tv__vacio {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0.2em;
+  color: var(--amarillo-tenue);
+}
+
+/* Entrada: parpadeo con desplazamiento y una línea de escaneo que baja */
+.tv--entrada { animation: tv-glitch 0.4s steps(8, end); }
+.tv--entrada::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--cian);
+  box-shadow: 0 0 8px var(--cian);
+  pointer-events: none;
+  animation: tv-barrido 0.4s linear;
+}
+@keyframes tv-glitch {
+  0% { opacity: 0; transform: translateX(-6px); }
+  25% { opacity: 0.8; transform: translateX(4px); }
+  50% { opacity: 0.4; transform: translateX(-2px); }
+  75% { opacity: 1; transform: translateX(1px); }
+  100% { opacity: 1; transform: none; }
+}
+@keyframes tv-barrido { from { top: 0; } to { top: 100%; } }

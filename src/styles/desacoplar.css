@@ -1,0 +1,77 @@
+/* Desacoplar tarjetas: asa de la cabecera, fantasma DOM del arrastre y hueco «DESACOPLADO». */
+
+.dsc-desacoplable .marco__cabecera,
+.tmp__tira.dsc-desacoplable .tmp__t-fila { cursor: grab; }
+.dsc-desacoplable .marco__cabecera { position: relative; }
+/* Fuera del flujo: así no recoloca las dos etiquetas de la cabecera */
+.dsc-desacoplable .marco__cabecera::after {
+  content: "⧉";
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  font-size: var(--tam-xs);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.dsc-desacoplable .marco__cabecera:hover::after { opacity: 0.7; }
+.dsc-arrastrando, .dsc-arrastrando * { cursor: grabbing !important; user-select: none !important; }
+.dsc-origen { opacity: 0.35; }
+
+.dsc-fantasma {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--amarillo) 10%, transparent);
+  border: 1px solid var(--amarillo);
+  opacity: 0.85;
+  transition: opacity 0.12s;
+}
+.dsc-fantasma__cab {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--esp-3) var(--esp-4);
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-s);
+  letter-spacing: 0.18em;
+  color: var(--amarillo);
+}
+.dsc-fantasma__cuerpo {
+  flex: 1;
+  background: repeating-linear-gradient(to bottom, var(--amarillo-tenue) 0 1px, transparent 1px 6px);
+  background-size: 100% 12px;
+  animation: dsc-escaneo 1s linear infinite;
+}
+.dsc-fantasma--fuera { opacity: 0; }
+.dsc-fantasma--vuelta { opacity: 0; transition: transform 0.18s ease-out, opacity 0.18s; }
+@keyframes dsc-escaneo { to { background-position-y: 12px; } }
+
+.dsc-hueco { display: block; padding: 0; }
+.dsc-hueco[hidden] { display: none; }
+.dsc-hueco__cuerpo {
+  display: flex;
+  align-items: center;
+  gap: var(--esp-4);
+  padding: var(--esp-4);
+}
+.dsc-hueco__estado {
+  font-family: var(--fuente-titulo);
+  font-size: var(--tam-s);
+  letter-spacing: 0.2em;
+  color: var(--amarillo);
+}
+.dsc-hueco__nombre {
+  flex: 1;
+  font-size: var(--tam-xs);
+  letter-spacing: 0.16em;
+  color: var(--texto-tenue);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dsc-fantasma__cuerpo { animation: none; }
+  .dsc-fantasma, .dsc-desacoplable .marco__cabecera::after { transition: none; }
+}

@@ -1,0 +1,121 @@
+/* Vista ampliada de METEO (tarjeta.html?tipo=meteo). Prefijo tvm__. Solo tokens del tema. */
+
+.tvm {
+  --cat-4: color-mix(in srgb, var(--primario) 55%, var(--secundario));
+  --cat-5: color-mix(in srgb, var(--secundario) 55%, var(--alerta));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  grid-template-areas:
+    "ahora agenda"
+    "h48 h48"
+    "dias dias"
+    "pie pie";
+  gap: var(--esp-3);
+  font-family: var(--fuente-datos);
+}
+.tvm > .marco { min-width: 0; }
+.tvm__ahora { grid-area: ahora; }
+.tvm__agenda { grid-area: agenda; }
+.tvm__h48 { grid-area: h48; }
+.tvm__14 { grid-area: dias; }
+.tvm__pie {
+  grid-area: pie;
+  text-align: right;
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+.tvm__marco-aviso { height: 100%; display: flex; flex-direction: column; }
+.tvm__vacio {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: var(--esp-4);
+  text-align: center;
+  letter-spacing: 0.2em;
+  color: var(--amarillo-tenue);
+}
+.tvm__cuerpo { font-size: var(--tam-s); }
+
+/* AHORA */
+.tvm__ahora-cab { display: flex; align-items: center; gap: var(--esp-3); flex-wrap: wrap; }
+.tvm__ahora-icono { color: var(--cian); filter: drop-shadow(0 0 6px var(--cian-tenue)); display: flex; }
+.tvm__ahora-temp { font-family: var(--fuente-titulo); font-size: var(--tam-xl); color: var(--amarillo); }
+.tvm__ahora-texto { letter-spacing: 0.1em; font-size: var(--tam-xs); color: var(--texto); }
+.tvm__datos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--esp-2) var(--esp-3);
+  margin: var(--esp-3) 0 var(--esp-2);
+}
+.tvm__datos dt { font-size: var(--tam-xs); letter-spacing: 0.14em; color: var(--texto-tenue); }
+.tvm__datos dd { margin: 0; color: var(--amarillo); }
+.tvm__flecha { display: inline-flex; vertical-align: middle; color: var(--cian); }
+.tvm__uv--alto { color: var(--rojo); }
+.tvm__ciudad { font-size: var(--tam-xs); letter-spacing: 0.14em; color: var(--amarillo-tenue); }
+
+/* 48 H: reutiliza las clases de la gráfica del panel, pero en cian */
+.tvm .tmp__grafica { display: block; width: 100%; height: auto; }
+.tvm .tmp__g-vacio { padding: var(--esp-3) 0; text-align: center; font-size: var(--tam-xs); letter-spacing: 0.16em; color: var(--texto-tenue); }
+.tvm .tmp__g-linea { fill: none; stroke: var(--cian); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
+.tvm .tmp__g-area { fill: var(--cian-suave); stroke: none; }
+.tvm .tmp__g-barra { fill: var(--cian); opacity: 0.45; }
+.tvm .tmp__g-base,
+.tvm .tmp__g-marca { stroke: var(--cian-tenue); stroke-width: 0.6; }
+.tvm .tmp__g-medianoche { stroke: var(--amarillo-tenue); stroke-width: 0.8; stroke-dasharray: 3 3; }
+.tvm .tmp__g-pico { fill: var(--cian); stroke: var(--fondo); stroke-width: 0.8; }
+.tvm .tmp__g-txt { fill: var(--texto-tenue); font-family: var(--fuente-datos); font-size: 9px; letter-spacing: 0.06em; }
+.tvm .tmp__g-txt--dato { fill: var(--cian); }
+.tvm .tmp__g-txt--dia { fill: var(--amarillo); }
+
+/* 14 DÍAS */
+.tvm__dias { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: var(--esp-2); }
+.tvm__dia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--esp-1);
+  border: 1px solid var(--cian-suave);
+  color: var(--cian);
+  font-size: var(--tam-xs);
+}
+.tvm__dia--hoy { border-color: var(--amarillo); background: var(--amarillo-suave); }
+.tvm__dia-nombre { letter-spacing: 0.12em; color: var(--texto); }
+.tvm__dia--hoy .tvm__dia-nombre { color: var(--amarillo); }
+.tvm__dia-fecha { color: var(--texto-tenue); }
+.tvm__dia-temp b { color: var(--amarillo); font-weight: 400; }
+.tvm__dia-temp i { color: var(--texto-tenue); font-style: normal; }
+.tvm__rango { position: relative; width: 100%; height: 3px; background: var(--cian-suave); }
+.tvm__rango i { position: absolute; top: 0; bottom: 0; background: var(--cian); }
+.tvm__dia-lluvia { color: var(--cian); }
+
+/* AGENDA · 7 DÍAS */
+.tvm__ag-dia + .tvm__ag-dia { margin-top: var(--esp-2); }
+.tvm__ag-cab {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--esp-2);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--amarillo-suave);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--amarillo);
+}
+.tvm__ag-tiempo { display: inline-flex; align-items: center; gap: var(--esp-1); color: var(--cian); letter-spacing: 0.04em; }
+.tvm__evs { list-style: none; margin: 0; padding: 0; }
+.tvm__ev { display: flex; align-items: baseline; gap: var(--esp-2); padding: 3px 0; }
+.tvm__ev-hora { flex: none; min-width: 5.5em; font-size: var(--tam-xs); color: var(--texto-tenue); }
+.tvm__cuadrado { flex: none; width: 6px; height: 6px; background: var(--cat); display: inline-block; }
+.tvm__ev-txt { min-width: 0; display: flex; flex-direction: column; }
+.tvm__ev-titulo { overflow-wrap: anywhere; color: var(--texto); }
+.tvm__ev-ubic { font-size: var(--tam-xs); color: var(--texto-tenue); overflow-wrap: anywhere; }
+
+/* Ventana estrecha: una sola columna */
+@media (max-width: 620px) {
+  .tvm {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "ahora" "h48" "dias" "agenda" "pie";
+  }
+}

@@ -79,6 +79,26 @@ export interface MuestraSistema {
 
 export const muestraSistema = () => invoke<MuestraSistema>("muestra_sistema");
 
+/** Muestra compacta del historial de 10 minutos (t en ms desde la época Unix). */
+export interface PuntoHistorial {
+  t: number;
+  cpu: number;
+  ram_pct: number;
+  gpu: number | null;
+}
+
+/** Proceso, o grupo de procesos con el mismo nombre. `cpu` va normalizado al total de la máquina. */
+export interface Proceso {
+  nombre: string;
+  pid: number;
+  cuantos: number;
+  cpu: number;
+  memoria: number;
+}
+
+export const historialSistema = () => invoke<PuntoHistorial[]>("historial_sistema");
+export const procesosSistema = () => invoke<Proceso[]>("procesos_sistema");
+
 export interface EventoCalendario {
   /** Estable por ocurrencia: `uid|inicio UTC` */
   id: string;
@@ -135,6 +155,9 @@ export interface ActualMeteo {
   es_de_dia: boolean;
   texto: string;
   icono: string;
+  /** Grados (0 = norte): de dónde sopla. Ausente en una caché antigua. */
+  direccion_viento?: number | null;
+  uv?: number | null;
 }
 
 export interface DiaMeteo {
@@ -145,6 +168,10 @@ export interface DiaMeteo {
   prob_lluvia: number | null;
   texto: string;
   icono: string;
+  /** AAAA-MM-DDTHH:MM, hora local de la ciudad (ausentes en una caché antigua) */
+  salida_sol?: string | null;
+  puesta_sol?: string | null;
+  uv_max?: number | null;
 }
 
 export interface HoraMeteo {
@@ -159,7 +186,7 @@ export interface EstadoMeteo {
   ciudad: Ciudad | null;
   actual: ActualMeteo | null;
   dias: DiaMeteo[];
-  /** Próximas 24 horas (vacío con una caché antigua) */
+  /** Próximas 48 horas (vacío con una caché antigua); el panel usa solo las 24 primeras */
   por_horas?: HoraMeteo[];
   actualizado: string | null;
   cargando: boolean;
@@ -348,6 +375,8 @@ export type EventoPanel =
   | "consumo://ajustes"
   | "consumo://aviso"
   | "consumo://ventana"
+  | "tarjetas://cambio"
+  | "fantasma://titulo"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"
@@ -715,6 +744,22 @@ export const alDatosConsumo = (cb: (d: DatosDisco) => void) => alEvento<DatosDis
 
 /** Abre la ventana flotante con la información completa de Consumo (si ya está abierta, la trae al frente). */
 export const abrirVentanaConsumo = () => invoke<void>("abrir_ventana_consumo");
+// --- Tarjetas desacopladas (ventanas) ---
+export type TipoTarjeta = "meteo" | "notas" | "sistema";
+/** Abre la ventana de la tarjeta; x e y: posición física del cursor al soltar (el núcleo prefiere leer el cursor él mismo). */
+export const abrirTarjeta = (tipo: TipoTarjeta, x?: number, y?: number) => invoke<void>("abrir_tarjeta", { tipo, x, y });
+/** Tipos de tarjeta con ventana abierta. */
+export const tarjetasAbiertas = () => invoke<string[]>("tarjetas_abiertas");
+export const cerrarTarjeta = (tipo: TipoTarjeta) => invoke<void>("cerrar_tarjeta", { tipo });
+/** Mientras es true el panel no se cierra solo (arrastrando una tarjeta). */
+export const arrastreTarjeta = (activo: boolean) => invoke<void>("arrastre_tarjeta", { activo });
+/** Ventana fantasma que acompaña al cursor fuera del panel; ancho y alto lógicos. */
+export const fantasmaMostrar = (titulo: string, ancho: number, alto: number) =>
+  invoke<void>("fantasma_mostrar", { titulo, ancho, alto });
+/** Sin coordenadas, el núcleo usa la posición real del cursor. */
+export const fantasmaMover = () => invoke<void>("fantasma_mover");
+export const fantasmaOcultar = () => invoke<void>("fantasma_ocultar");
+
 /** El nombre de este equipo (el de sus ficheros), para marcarlo entre los de EQUIPOS. */
 export const equipoConsumo = () => invoke<string>("equipo_consumo");
 /** Abre el panel en AJUSTES → CONSUMO (como una apertura manual). */

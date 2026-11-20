@@ -12,17 +12,18 @@ import {
   type Tarea,
 } from "../../lib/ipc";
 import { abrirAjustes } from "../../lib/navegacion";
+import { hacerDesacoplable } from "../../ui/desacoplar";
 
-const esc = (t: string) =>
+export const esc = (t: string) =>
   t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
-const dos = (n: number) => String(n).padStart(2, "0");
+export const dos = (n: number) => String(n).padStart(2, "0");
 
 const ENGRANAJE = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M10.5 2.5h3l.5 2.4 1.9.8 2.1-1.4 2.1 2.1-1.4 2.1.8 1.9 2.4.5v3l-2.4.5-.8 1.9 1.4 2.1-2.1 2.1-2.1-1.4-1.9.8-.5 2.4h-3l-.5-2.4-1.9-.8-2.1 1.4-2.1-2.1 1.4-2.1-.8-1.9-2.4-.5v-3l2.4-.5.8-1.9-1.4-2.1 2.1-2.1 2.1 1.4 1.9-.8z"/></svg>`;
-const NUBE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 7 9.5 4.25 4.25 0 0 0 7 18z"/><path data-nube="marca" d="M12 15v-4M10 13l2-2 2 2"/></svg>`;
-const MARCA = `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 6.5l2.6 2.6L10 3.2"/></svg>`;
+export const NUBE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true"><path d="M7 18h10a4 4 0 0 0 .5-7.97A5.5 5.5 0 0 0 7 9.5 4.25 4.25 0 0 0 7 18z"/><path data-nube="marca" d="M12 15v-4M10 13l2-2 2 2"/></svg>`;
+export const MARCA = `<svg viewBox="0 0 12 12" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M2 6.5l2.6 2.6L10 3.2"/></svg>`;
 
 /** «HACE 5 MIN», «HACE 2 H», «HACE 3 D» a partir de milisegundos. */
-function hace(ms: number): string {
+export function hace(ms: number): string {
   const min = Math.floor((Date.now() - ms) / 60000);
   if (min < 1) return "AHORA";
   if (min < 60) return `HACE ${min} MIN`;
@@ -30,7 +31,7 @@ function hace(ms: number): string {
   return `HACE ${Math.floor(min / 1440)} D`;
 }
 
-const primeraLinea = (cuerpo: string) => cuerpo.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
+export const primeraLinea = (cuerpo: string) => cuerpo.split("\n").find((l) => l.trim() !== "")?.trim() ?? "";
 
 export function montar(contenedor: HTMLElement): void {
   contenedor.innerHTML = `
@@ -160,6 +161,7 @@ export function montar(contenedor: HTMLElement): void {
           <div data-id="lista-tareas"></div>
         </div>
       </section>`;
+    hacerDesacoplable(raiz.querySelector<HTMLElement>(".marco")!, { tipo: "notas", titulo: "TAREAS" });
     const campo = raiz.querySelector<HTMLInputElement>('[data-id="nueva"]')!;
     campo.addEventListener("keydown", (e) => {
       if (e.key !== "Enter") return;
@@ -340,6 +342,7 @@ export function montar(contenedor: HTMLElement): void {
         </div>
         <div class="marco__cuerpo"><div data-id="lista-notas"></div></div>
       </section>`;
+    hacerDesacoplable(raiz.querySelector<HTMLElement>(".marco")!, { tipo: "notas", titulo: "NOTAS" });
     pintarListaNotas();
   };
 

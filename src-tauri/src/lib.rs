@@ -17,6 +17,7 @@ mod pantalla_completa;
 mod pendientes;
 mod sistema;
 mod sync;
+mod tarjetas;
 mod ventanas;
 
 use estado::Estado;
@@ -47,6 +48,8 @@ pub fn run() {
             ventanas::abrir_ajustes_consumo,
             ventanas::estado_pantalla_completa,
             sistema::muestra_sistema,
+            sistema::historial_sistema,
+            sistema::procesos_sistema,
             calendario::estado_calendario,
             calendario::sincronizar_calendario,
             consumo::estado_consumo,
@@ -55,6 +58,13 @@ pub fn run() {
             consumo::vista_consumo,
             consumo::serie_consumo,
             consumo::ventana::abrir_ventana_consumo,
+            tarjetas::abrir_tarjeta,
+            tarjetas::tarjetas_abiertas,
+            tarjetas::cerrar_tarjeta,
+            tarjetas::arrastre_tarjeta,
+            tarjetas::fantasma_mostrar,
+            tarjetas::fantasma_mover,
+            tarjetas::fantasma_ocultar,
             consumo::detalle_consumo,
             consumo::historico_vista::historico_consumo,
             consumo::historico_vista::semanas_archivadas,
@@ -118,6 +128,7 @@ pub fn run() {
             app.manage(Estado::nuevo(cfg));
             // Siempre arranca solo con la pestaña (con o sin --oculto)
             ventanas::preparar(&handle);
+            tarjetas::iniciar(&handle);
             sistema::iniciar(&handle);
             cuentas::iniciar(&handle);
             interfaz::iniciar(&handle);
@@ -139,7 +150,11 @@ pub fn run() {
         .on_window_event(|ventana, evento| {
             // Los eventos de ventana pueden llegar antes de que `setup` registre el estado
             if ventana.label() == "panel" && ventana.app_handle().try_state::<Estado>().is_some() {
+                // Durante el arrastre de una tarjeta el panel pierde el foco sin que deba cerrarse
                 if let WindowEvent::Focused(false) = evento {
+                    if tarjetas::arrastre_activo(ventana.app_handle()) {
+                        return;
+                    }
                     ventanas::pedir_ocultar(ventana.app_handle());
                 }
             }

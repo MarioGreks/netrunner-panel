@@ -358,7 +358,10 @@ pub fn iniciar_deteccion(app: AppHandle) {
             let Some(g) = calcular(&app, borde) else { continue };
 
             // --- Cierre al sacar el ratón ---
-            if estado.panel_visible.load(Ordering::SeqCst) {
+            if crate::tarjetas::arrastre_activo(&app) {
+                // Arrastrando una tarjeta fuera del panel: ni cuenta de salida ni cierre
+                fuera_desde = None;
+            } else if estado.panel_visible.load(Ordering::SeqCst) {
                 if sobre_panel(&g, c.x, c.y) {
                     fuera_desde = None;
                     if cerrando.take().is_some() {

@@ -1,8 +1,9 @@
 // Módulo SISTEMA: CPU, memoria, GPU, discos y batería en vivo.
 import { alEvento, muestraSistema, type MuestraSistema } from "../../lib/ipc";
 import { crearAnillo, crearOnda } from "../../ui/grafica";
+import { hacerDesacoplable } from "../../ui/desacoplar";
 
-const UMBRAL_ALTO = 90; // por encima, el valor se pinta en rojo
+export const UMBRAL_ALTO = 90; // por encima, el valor se pinta en rojo
 const SEGMENTOS_DISCO = 24;
 const GB = 1024 ** 3;
 
@@ -64,6 +65,10 @@ export function montar(contenedor: HTMLElement): void {
         )}
       </div>
     </div>`;
+  // Cualquiera de las tarjetas lleva a la ventana de SISTEMA
+  contenedor.querySelectorAll<HTMLElement>(".marco").forEach((t) => {
+    hacerDesacoplable(t, { tipo: "sistema", titulo: t.querySelector(".marco__cabecera span")?.textContent ?? "SISTEMA" });
+  });
 
   const q = <T extends HTMLElement>(id: string) =>
     contenedor.querySelector<T>(`[data-id="${id}"]`)!;

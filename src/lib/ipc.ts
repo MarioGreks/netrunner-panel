@@ -376,6 +376,7 @@ export type EventoPanel =
   | "consumo://aviso"
   | "consumo://ventana"
   | "tarjetas://cambio"
+  | "widgets://estado"
   | "fantasma://titulo"
   | "cuentas://estado"
   | "cuentas_ms://estado"
@@ -759,6 +760,22 @@ export const fantasmaMostrar = (titulo: string, ancho: number, alto: number) =>
 /** Sin coordenadas, el núcleo usa la posición real del cursor. */
 export const fantasmaMover = () => invoke<void>("fantasma_mover");
 export const fantasmaOcultar = () => invoke<void>("fantasma_ocultar");
+
+// --- Widgets de escritorio (ventanas pegadas al escritorio) ---
+export type TipoWidget = "reloj" | "sistema" | "consumo" | "tareas" | "cuentas";
+export interface EstadoWidgets {
+  activos: TipoWidget[];
+  /** Opacidad del fondo de los widgets, entre 0.2 y 1. */
+  opacidad: number;
+  /** Con true los widgets se pueden mover, redimensionar y quitar. */
+  edicion: boolean;
+}
+export const widgetsEstado = () => invoke<EstadoWidgets>("widgets_estado");
+export const alEstadoWidgets = (cb: (e: EstadoWidgets) => void) => alEvento<EstadoWidgets>("widgets://estado", cb);
+export const fijarEdicionWidgets = (activa: boolean) => invoke<void>("fijar_edicion_widgets", { activa });
+export const anadirWidget = (tipo: TipoWidget) => invoke<void>("anadir_widget", { tipo });
+export const quitarWidget = (tipo: TipoWidget) => invoke<void>("quitar_widget", { tipo });
+export const fijarOpacidadWidgets = (valor: number) => invoke<void>("fijar_opacidad_widgets", { valor });
 
 /** El nombre de este equipo (el de sus ficheros), para marcarlo entre los de EQUIPOS. */
 export const equipoConsumo = () => invoke<string>("equipo_consumo");

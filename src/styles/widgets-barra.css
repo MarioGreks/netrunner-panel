@@ -1,0 +1,97 @@
+/* Barra de edición de widgets: marco HUD cian sobre página transparente. Dos filas: título,
+   opacidad y LISTO arriba; catálogo debajo. */
+
+html, body { background: transparent; }
+.wb-body { margin: 0; height: 100vh; overflow: hidden; user-select: none; }
+
+.wb {
+  --wb-corte: 12px;
+  position: relative;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 6px;
+  height: 100%;
+  padding: 8px 18px;
+  background: rgba(var(--fondo-panel-rgb), 0.94);
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--wb-corte)) 0,
+    100% var(--wb-corte),
+    100% 100%,
+    var(--wb-corte) 100%,
+    0 calc(100% - var(--wb-corte))
+  );
+}
+/* Borde de 1 px que sigue las esquinas cortadas */
+.wb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--cian);
+  clip-path: polygon(evenodd,
+    0 0, calc(100% - var(--wb-corte)) 0, 100% var(--wb-corte), 100% 100%, var(--wb-corte) 100%, 0 calc(100% - var(--wb-corte)),
+    1px 1px, calc(100% - var(--wb-corte) - 0.4px) 1px, calc(100% - 1px) calc(var(--wb-corte) + 0.4px),
+    calc(100% - 1px) calc(100% - 1px), calc(var(--wb-corte) + 0.4px) calc(100% - 1px), 1px calc(100% - var(--wb-corte) - 0.4px));
+}
+
+.wb__fila {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 0;
+}
+.wb__titulo {
+  flex: 1;
+  font-family: var(--fuente-titulo);
+  font-weight: 500;
+  font-size: var(--tam-s);
+  letter-spacing: 0.2em;
+  color: var(--cian);
+  white-space: nowrap;
+}
+
+.wb__opacidad {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+.wb__opacidad input { width: 170px; accent-color: var(--cian); cursor: pointer; }
+.wb__valor { min-width: 4ch; text-align: right; color: var(--cian); }
+
+.wb__listo,
+.wb__tipo {
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--cian-tenue);
+  color: var(--cian);
+}
+.wb__listo { padding: 3px 20px; font-weight: 700; border-color: var(--cian); }
+.wb__listo:hover, .wb__tipo:hover { background: var(--cian-suave); border-color: var(--cian); }
+.wb__listo:focus-visible, .wb__tipo:focus-visible, .wb__opacidad input:focus-visible {
+  outline: 1px solid var(--cian);
+  outline-offset: 2px;
+}
+
+.wb__catalogo {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  min-height: 0;
+}
+/* Inactivo: apagado; activo: resaltado en cian */
+.wb__tipo { padding: 0 6px; white-space: nowrap; color: var(--texto-tenue); border-color: var(--borde, var(--cian-tenue)); }
+.wb__tipo--activo {
+  color: var(--cian);
+  background: var(--cian-suave);
+  border-color: var(--cian);
+  text-shadow: 0 0 6px var(--cian-tenue);
+}

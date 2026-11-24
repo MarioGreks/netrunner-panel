@@ -71,6 +71,7 @@ pub fn run() {
             widgets::anadir_widget,
             widgets::quitar_widget,
             widgets::fijar_opacidad_widgets,
+            widgets::widget_a_la_vista,
             consumo::detalle_consumo,
             consumo::historico_vista::historico_consumo,
             consumo::historico_vista::semanas_archivadas,

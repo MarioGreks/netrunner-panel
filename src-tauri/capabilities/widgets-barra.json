@@ -1,0 +1,9 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "widgets-barra",
+  "description": "Permisos mínimos de la barra de edición de widgets (solo eventos; el resto va por comandos propios)",
+  "windows": ["widgets-barra"],
+  "permissions": [
+    "core:event:default"
+  ]
+}

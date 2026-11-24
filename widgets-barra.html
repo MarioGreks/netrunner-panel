@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WIDGETS // EDICIÓN</title>
+  </head>
+  <body class="wb-body">
+    <div class="wb" id="raiz">
+      <div class="wb__fila">
+        <span class="wb__titulo">WIDGETS // EDICIÓN</span>
+        <label class="wb__opacidad" for="opacidad">
+          <span class="wb__rotulo">OPACIDAD</span>
+          <input id="opacidad" type="range" min="20" max="100" step="1" value="75" />
+          <output class="wb__valor" id="valor" for="opacidad">75%</output>
+        </label>
+        <button class="wb__listo" id="listo" type="button" title="Salir de la edición (Esc)">LISTO</button>
+      </div>
+      <div class="wb__catalogo" id="catalogo" role="group" aria-label="Catálogo de widgets"></div>
+    </div>
+    <script type="module" src="/src/widgets-barra.ts"></script>
+  </body>
+</html>

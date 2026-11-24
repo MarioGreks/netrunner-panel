@@ -377,6 +377,7 @@ export type EventoPanel =
   | "consumo://ventana"
   | "tarjetas://cambio"
   | "widgets://estado"
+  | "widgets://visible"
   | "fantasma://titulo"
   | "cuentas://estado"
   | "cuentas_ms://estado"
@@ -775,7 +776,17 @@ export const alEstadoWidgets = (cb: (e: EstadoWidgets) => void) => alEvento<Esta
 export const fijarEdicionWidgets = (activa: boolean) => invoke<void>("fijar_edicion_widgets", { activa });
 export const anadirWidget = (tipo: TipoWidget) => invoke<void>("anadir_widget", { tipo });
 export const quitarWidget = (tipo: TipoWidget) => invoke<void>("quitar_widget", { tipo });
-export const fijarOpacidadWidgets = (valor: number) => invoke<void>("fijar_opacidad_widgets", { valor });
+/** Con `guardar` en false solo se aplica en vivo (para arrastrar el deslizador); por defecto también se guarda. */
+export const fijarOpacidadWidgets = (valor: number, guardar = true) =>
+  invoke<void>("fijar_opacidad_widgets", { valor, guardar });
+export interface VisibilidadWidget {
+  tipo: TipoWidget;
+  /** false si otra ventana lo tapa por completo o la app está oculta: no hace falta que trabaje. */
+  visible: boolean;
+}
+export const alVisibilidadWidget = (cb: (e: VisibilidadWidget) => void) =>
+  alEvento<VisibilidadWidget>("widgets://visible", cb);
+export const widgetALaVista = (tipo: TipoWidget) => invoke<boolean>("widget_a_la_vista", { tipo });
 
 /** El nombre de este equipo (el de sus ficheros), para marcarlo entre los de EQUIPOS. */
 export const equipoConsumo = () => invoke<string>("equipo_consumo");

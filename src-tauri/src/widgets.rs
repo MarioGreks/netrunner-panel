@@ -8,6 +8,11 @@
 //! - Modo edición (menú de la bandeja): la página muestra asas para mover, redimensionar y quitar.
 //! - Si Explorer se reinicia, Progman (dueño de las ventanas) se destruye y arrastra a los widgets:
 //!   se recrean pasados unos segundos, salvo que la app esté saliendo.
+//! - Barra de edición (`widgets-barra`): ventana propia con el catálogo, la opacidad y LISTO; existe
+//!   solo mientras dura la edición.
+//! - Widgets tapados: un único hilo (cada 2 s, solo con widgets activos y sin modo Ocultar) mira si
+//!   alguna ventana ajena los cubre por completo y avisa a la página cuando cambia, para que no
+//!   trabaje mientras no se ve.
 //! - El contenido real de cada widget llega en otros encargos; de momento la página pinta un marcador.
 
 use std::collections::{HashMap, HashSet};
@@ -47,6 +52,13 @@ const REINTENTOS: u32 = 5;
 const OPACIDAD_MIN: f64 = 0.2;
 const OPACIDAD_MAX: f64 = 1.0;
 const OPACIDAD_DEFECTO: f64 = 0.75;
+/// Periodo del hilo de vigilancia de widgets tapados.
+const PERIODO_VIGILANCIA: Duration = Duration::from_secs(2);
+const ETIQUETA_BARRA: &str = "widgets-barra";
+/// Tamaño lógico de la barra de edición y margen con el borde superior del área de trabajo.
+const BARRA_ANCHO: f64 = 760.0;
+const BARRA_ALTO: f64 = 76.0;
+const BARRA_MARGEN: f64 = 16.0;
 
 fn opacidad_defecto() -> f64 {
     OPACIDAD_DEFECTO
@@ -88,6 +100,12 @@ pub struct Widgets {
     saliendo: AtomicBool,
     encaje: Arc<ReboteEncaje>,
     rebote: Arc<Antirrebote>,
+    /// Visibilidad por tipo según el último repaso (si falta, se da por visible).
+    visibles: Mutex<HashMap<String, bool>>,
+    /// Hay un hilo de vigilancia vivo.
+    vigilando: AtomicBool,
+    /// Serializa crear y destruir la barra de edición (las tareas pueden solaparse).
+    barra: Mutex<()>,
 }
 
 fn bloquear<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -307,14 +325,14 @@ fn progman_existe() -> bool {
     true
 }
 
-/// Subclase del widget. Cada cambio de posición pasa por aquí antes de aplicarse: se fuerza
-/// `HWND_BOTTOM` y se quita `SWP_NOZORDER`. Así, aunque el clic o la activación pidan subir la
-/// ventana, nunca queda por encima de otras aplicaciones; al ser propiedad de Progman, el
-/// sistema la mantiene por encima del fondo de pantalla.
 /// Mensaje propio de la subclase: restaurar el widget sin activarlo.
 #[cfg(windows)]
 const WM_RESTAURAR: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 0x4E;
 
+/// Subclase del widget. Cada cambio de orden Z pasa por aquí antes de aplicarse y se redirige a
+/// «justo encima de Progman» (su dueño): así, aunque el clic o la activación pidan subir la
+/// ventana, nunca queda por encima de otras aplicaciones. No se usa `HWND_BOTTOM`: con Win+D
+/// Progman cambia de sitio y el widget podía colarse POR DEBAJO de él (tapado por el fondo).
 #[cfg(windows)]
 unsafe extern "system" fn subclase_al_fondo(
     hwnd: windows::Win32::Foundation::HWND,
@@ -327,14 +345,25 @@ unsafe extern "system" fn subclase_al_fondo(
     use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows::Win32::UI::Shell::DefSubclassProc;
     use windows::Win32::UI::WindowsAndMessaging::{
-        PostMessageW, ShowWindow, HWND_BOTTOM, SIZE_MINIMIZED, SWP_NOZORDER, SW_SHOWNOACTIVATE, WINDOWPOS,
-        WM_SIZE, WM_WINDOWPOSCHANGING,
+        GetWindow, PostMessageW, ShowWindow, GW_HWNDPREV, GW_OWNER, HWND_TOP, SIZE_MINIMIZED, SWP_NOZORDER,
+        SW_SHOWNOACTIVATE, WINDOWPOS, WM_SIZE, WM_WINDOWPOSCHANGING,
     };
     if mensaje == WM_WINDOWPOSCHANGING && lparam.0 != 0 {
         // SAFETY: en WM_WINDOWPOSCHANGING, lparam apunta a un WINDOWPOS válido y modificable.
         let pos = unsafe { &mut *(lparam.0 as *mut WINDOWPOS) };
-        pos.hwndInsertAfter = HWND_BOTTOM;
-        pos.flags &= !SWP_NOZORDER;
+        if pos.flags & SWP_NOZORDER == SWP_NOZORDER {
+            // Sin cambio de orden Z: nada que corregir
+        } else if let Ok(dueno) = unsafe { GetWindow(hwnd, GW_OWNER) } {
+            // SAFETY: consultas de solo lectura sobre el dueño (Progman).
+            match unsafe { GetWindow(dueno, GW_HWNDPREV) } {
+                // Ya está justo encima de Progman: no se mueve
+                Ok(previa) if previa == hwnd => pos.flags |= SWP_NOZORDER,
+                // Insertar «después de» la ventana que precede a Progman = justo encima de él
+                Ok(previa) => pos.hwndInsertAfter = previa,
+                // Progman está arriba del todo (p. ej. con Win+D): el widget va por encima
+                Err(_) => pos.hwndInsertAfter = HWND_TOP,
+            }
+        }
     }
     // Un widget nunca se queda minimizado (p. ej. si nace con «Mostrar escritorio» activo): se
     // restaura después, con un mensaje propio, porque no conviene llamar a ShowWindow dentro de WM_SIZE.
@@ -356,7 +385,7 @@ unsafe extern "system" fn subclase_al_fondo(
 /// la ventana sigue siendo una ventana normal al fondo (no es un error). Debe llamarse antes de
 /// mostrarla. `SetWindowSubclass` exige el hilo que creó la ventana, de ahí `run_on_main_thread`.
 #[cfg(windows)]
-fn pegar_al_escritorio(v: &WebviewWindow) {
+fn pegar_al_escritorio(v: &WebviewWindow, mostrar: bool) {
     use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::UI::Shell::SetWindowSubclass;
@@ -383,13 +412,16 @@ fn pegar_al_escritorio(v: &WebviewWindow) {
             let _ = SetWindowSubclass(hwnd, Some(subclase_al_fondo), 0x4E52, 0);
             let _ = SetWindowPos(hwnd, Some(HWND_BOTTOM), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
             // Se muestra aquí, ya con dueño y subclase, y sin activarla: un widget nunca roba el foco
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            // (con el modo Ocultar activo se queda sin mostrar hasta que se desactive)
+            if mostrar {
+                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            }
         }
     });
 }
 
 #[cfg(not(windows))]
-fn pegar_al_escritorio(_v: &WebviewWindow) {}
+fn pegar_al_escritorio(_v: &WebviewWindow, _mostrar: bool) {}
 
 // --- Ventanas ---
 
@@ -401,6 +433,7 @@ fn abrir(app: &AppHandle, tipo: &str) -> Result<(), String> {
     if app.get_webview_window(&etq).is_some() {
         return Ok(());
     }
+    olvidar_visibilidad(app, tipo); // un widget nuevo parte de «a la vista»
     let v = WebviewWindowBuilder::new(app, &etq, WebviewUrl::App(format!("widget.html?tipo={tipo}").into()))
         .title(format!("{} // NETRUNNER", tipo.to_uppercase()))
         .inner_size(ancho, alto)
@@ -464,6 +497,7 @@ fn abrir(app: &AppHandle, tipo: &str) -> Result<(), String> {
         }
         WindowEvent::Destroyed => {
             let Some(est) = app2.try_state::<Widgets>() else { return };
+            bloquear(&est.visibles).remove(&tipo_s);
             if bloquear(&est.cerrando).remove(&tipo_s) {
                 // Lo quitó el usuario
                 {
@@ -493,9 +527,14 @@ fn abrir(app: &AppHandle, tipo: &str) -> Result<(), String> {
 
     // Como `mostrar_mini`: WebView2 puede pintar de negro lo transparente tras ocultar/redimensionar
     let _ = v.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
-    pegar_al_escritorio(&v); // la pega al escritorio y la muestra sin activarla
+    // La pega al escritorio y la muestra sin activarla (salvo en modo Ocultar)
+    let mostrar = !crate::ventanas::esta_oculto();
+    pegar_al_escritorio(&v, mostrar);
     #[cfg(not(windows))]
-    let _ = v.show();
+    if mostrar {
+        let _ = v.show();
+    }
+    asegurar_vigilancia(app);
     Ok(())
 }
 
@@ -531,9 +570,338 @@ pub fn marcar_salida(app: &AppHandle) {
 /// Activa o desactiva el modo edición, sincroniza el check de la bandeja y avisa a las páginas.
 pub fn fijar_edicion(app: &AppHandle, activa: bool) {
     let Some(est) = app.try_state::<Widgets>() else { return };
+    // Editar con la app oculta no tendría sentido (barra sin widgets): se desoculta antes
+    if activa && crate::ventanas::esta_oculto() {
+        crate::ventanas::fijar_oculto(app, false);
+    }
     est.edicion.store(activa, Ordering::SeqCst);
     crate::bandeja::actualizar_edicion(app, activa);
     avisar_cambio(app);
+    sincronizar_barra(app);
+}
+
+/// Crea o destruye la barra según el modo edición. Se hace fuera del hilo que llama: crear
+/// ventanas desde un comando síncrono o el menú de la bandeja (hilo principal) bloquearía Windows.
+fn sincronizar_barra(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let Some(est) = app.try_state::<Widgets>() else { return };
+        let _paso = bloquear(&est.barra);
+        // El modo se lee aquí, con el cerrojo, para que el último cambio gane
+        if est.edicion.load(Ordering::SeqCst) {
+            if app.get_webview_window(ETIQUETA_BARRA).is_none() {
+                let _ = crear_barra(&app);
+            }
+        } else if let Some(v) = app.get_webview_window(ETIQUETA_BARRA) {
+            let _ = v.destroy();
+        }
+    });
+}
+
+/// Barra de edición: arriba y centrada en el monitor principal, siempre visible y con el foco
+/// (para que Esc funcione).
+fn crear_barra(app: &AppHandle) -> Result<(), String> {
+    let v = WebviewWindowBuilder::new(app, ETIQUETA_BARRA, WebviewUrl::App("widgets-barra.html".into()))
+        .title("WIDGETS // EDICIÓN")
+        .inner_size(BARRA_ANCHO, BARRA_ALTO)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .resizable(false)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    if let Some(m) = app.primary_monitor().ok().flatten() {
+        let (area, escala) = (m.work_area(), m.scale_factor());
+        let ancho = (BARRA_ANCHO * escala).round() as i32;
+        let x = area.position.x + (area.size.width as i32 - ancho) / 2;
+        let y = area.position.y + (BARRA_MARGEN * escala).round() as i32;
+        let _ = v.set_position(PhysicalPosition::new(x, y));
+    } else {
+        let _ = v.center();
+    }
+    let _ = v.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)));
+    // Alt+F4 u otro cierre ajeno equivale a salir de la edición (`destroy` no pasa por aquí)
+    let app2 = app.clone();
+    v.on_window_event(move |e| {
+        if let WindowEvent::CloseRequested { .. } = e {
+            if edicion_activa(&app2) {
+                fijar_edicion(&app2, false);
+            }
+        }
+    });
+    let _ = v.show();
+    let _ = v.set_focus();
+    Ok(())
+}
+
+// --- Modo «Ocultar Netrunner Panel» ---
+
+/// Esconde todos los widgets o los vuelve a mostrar sin activarlos. Al ocultar se sale antes de la
+/// edición y todos pasan a «no visibles» al instante.
+pub fn fijar_oculto(app: &AppHandle, valor: bool) {
+    if app.try_state::<Widgets>().is_none() {
+        return;
+    }
+    if valor && edicion_activa(app) {
+        fijar_edicion(app, false);
+    }
+    for (tipo, ..) in TIPOS {
+        let Some(v) = app.get_webview_window(&etiqueta(tipo)) else { continue };
+        if valor {
+            let _ = v.hide();
+        } else {
+            mostrar_sin_activar(&v);
+        }
+    }
+    revisar(app);
+    if !valor {
+        asegurar_vigilancia(app);
+    }
+}
+
+/// Muestra el widget sin activarlo y lo devuelve al fondo (no roba el foco ni rompe el pegado).
+#[cfg(windows)]
+fn mostrar_sin_activar(v: &WebviewWindow) {
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, ShowWindow, HWND_BOTTOM, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SW_SHOWNOACTIVATE,
+    };
+    let Ok(h) = v.hwnd() else { return };
+    let crudo = h.0 as isize; // HWND no es Send: viaja como entero
+    let _ = v.run_on_main_thread(move || {
+        let hwnd = HWND(crudo as *mut _);
+        // SAFETY: ventana de este widget, creada en este hilo; si se destruyó mientras tanto, las
+        // llamadas fallan sin efecto y se ignoran.
+        unsafe {
+            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            let _ = SetWindowPos(hwnd, Some(HWND_BOTTOM), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+        }
+    });
+}
+
+#[cfg(not(windows))]
+fn mostrar_sin_activar(v: &WebviewWindow) {
+    let _ = v.show();
+}
+
+// --- Widgets tapados ---
+
+/// Rectángulo en píxeles físicos: (izquierda, arriba, derecha, abajo), como un RECT.
+type Marco = (i32, i32, i32, i32);
+
+/// ¿Cubre `exterior` por completo a `interior`? Bordes iguales cuentan como cubrir.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn contiene(exterior: Marco, interior: Marco) -> bool {
+    exterior.0 <= interior.0 && exterior.1 <= interior.1 && exterior.2 >= interior.2 && exterior.3 >= interior.3
+}
+
+/// Ventanas del propio escritorio y de la barra de tareas: nunca tapan un widget.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn clase_ignorada(clase: &str) -> bool {
+    matches!(clase, "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd")
+}
+
+#[derive(Clone, Serialize)]
+struct AvisoVisible {
+    tipo: String,
+    visible: bool,
+}
+
+/// ¿Está el widget a la vista? Con el modo Ocultar, no. Sin dato todavía, sí.
+#[allow(dead_code)] // lo usará el muestreador de sistema
+pub fn a_la_vista(app: &AppHandle, tipo: &str) -> bool {
+    if crate::ventanas::esta_oculto() {
+        return false;
+    }
+    app.try_state::<Widgets>()
+        .map_or(true, |e| bloquear(&e.visibles).get(tipo).copied().unwrap_or(true))
+}
+
+#[tauri::command]
+pub fn widget_a_la_vista(app: AppHandle, tipo: String) -> bool {
+    a_la_vista(&app, &tipo)
+}
+
+fn olvidar_visibilidad(app: &AppHandle, tipo: &str) {
+    if let Some(est) = app.try_state::<Widgets>() {
+        bloquear(&est.visibles).remove(tipo);
+    }
+}
+
+fn debe_vigilar(app: &AppHandle) -> bool {
+    !crate::ventanas::esta_oculto()
+        && app.try_state::<Widgets>().is_some_and(|e| !bloquear(&e.datos).activos.is_empty())
+}
+
+/// Arranca el hilo de vigilancia si hace falta y no hay ya uno. El hilo repasa al empezar y cada
+/// 2 s, y termina solo cuando no queda widget activo o entra el modo Ocultar.
+fn asegurar_vigilancia(app: &AppHandle) {
+    let Some(est) = app.try_state::<Widgets>() else { return };
+    if !debe_vigilar(app) || est.vigilando.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    thread::spawn(move || loop {
+        let Some(est) = app.try_state::<Widgets>() else { return };
+        if est.saliendo.load(Ordering::SeqCst) {
+            est.vigilando.store(false, Ordering::SeqCst);
+            return;
+        }
+        if !debe_vigilar(&app) {
+            est.vigilando.store(false, Ordering::SeqCst);
+            // Pudo activarse un widget justo entre la comprobación y el aviso de «ya no vigilo»
+            if !debe_vigilar(&app) || est.vigilando.swap(true, Ordering::SeqCst) {
+                return;
+            }
+        }
+        revisar(&app);
+        thread::sleep(PERIODO_VIGILANCIA);
+    });
+}
+
+/// Calcula la visibilidad de cada widget abierto y avisa de los que cambian.
+fn revisar(app: &AppHandle) {
+    let Some(est) = app.try_state::<Widgets>() else { return };
+    let oculto = crate::ventanas::esta_oculto();
+    let abiertos: Vec<&str> = TIPOS
+        .iter()
+        .map(|(t, ..)| *t)
+        .filter(|t| app.get_webview_window(&etiqueta(t)).is_some())
+        .collect();
+    let nuevos: Vec<(&str, bool)> = if oculto {
+        abiertos.iter().map(|t| (*t, false)).collect()
+    } else {
+        calcular_visibles(app, &abiertos)
+    };
+    let mut cambios = Vec::new();
+    {
+        let mut mapa = bloquear(&est.visibles);
+        mapa.retain(|t, _| abiertos.contains(&t.as_str()));
+        for (tipo, visible) in nuevos {
+            if mapa.insert(tipo.to_string(), visible).unwrap_or(true) != visible {
+                cambios.push(AvisoVisible { tipo: tipo.to_string(), visible });
+            }
+        }
+    }
+    for c in cambios {
+        let _ = app.emit("widgets://visible", c);
+    }
+}
+
+#[cfg(not(windows))]
+fn calcular_visibles<'a>(_app: &AppHandle, tipos: &[&'a str]) -> Vec<(&'a str, bool)> {
+    tipos.iter().map(|t| (*t, true)).collect()
+}
+
+/// Estado de un widget durante el recorrido de ventanas.
+#[cfg(windows)]
+struct Objetivo<'a> {
+    tipo: &'a str,
+    hwnd: windows::Win32::Foundation::HWND,
+    marco: Marco,
+    /// Ya se llegó a su ventana (o a una que lo tapa): no hace falta seguir con él.
+    resuelto: bool,
+    tapado: bool,
+}
+
+#[cfg(windows)]
+struct Recorrido<'a, 'b> {
+    objetivos: &'b mut Vec<Objetivo<'a>>,
+    pid: u32,
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn paso_enum(
+    hwnd: windows::Win32::Foundation::HWND,
+    lparam: windows::Win32::Foundation::LPARAM,
+) -> windows::core::BOOL {
+    use windows::core::BOOL;
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetWindowLongPtrW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+        GWL_EXSTYLE, WS_EX_TRANSPARENT,
+    };
+    // SAFETY: lparam es el puntero a `Recorrido` que pasa `calcular_visibles`, vivo y exclusivo
+    // durante toda la llamada a EnumWindows (síncrona, en este mismo hilo).
+    let rec = unsafe { &mut *(lparam.0 as *mut Recorrido) };
+    // De arriba abajo: al llegar al HWND de un widget, todo lo que lo podía tapar ya se vio
+    if let Some(o) = rec.objetivos.iter_mut().find(|o| o.hwnd == hwnd) {
+        o.resuelto = true;
+        return BOOL::from(rec.objetivos.iter().any(|o| !o.resuelto));
+    }
+    // SAFETY: consultas de solo lectura sobre un HWND que EnumWindows acaba de dar; si la
+    // ventana muere a mitad, las llamadas fallan y se descarta como candidata.
+    let candidata = unsafe {
+        // Las superposiciones que dejan pasar el ratón (WS_EX_TRANSPARENT: capturas, overlays de
+        // GPU o de grabación) suelen cubrir toda la pantalla sin tapar nada de verdad
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
+        if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() || ex & WS_EX_TRANSPARENT.0 != 0 {
+            false
+        } else {
+            let mut cloaked = 0u32;
+            let _ = DwmGetWindowAttribute(
+                hwnd,
+                DWMWA_CLOAKED,
+                &mut cloaked as *mut u32 as *mut _,
+                std::mem::size_of::<u32>() as u32,
+            );
+            let mut pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut pid));
+            let mut buf = [0u16; 64];
+            let n = GetClassNameW(hwnd, &mut buf).max(0) as usize;
+            cloaked == 0 && pid != rec.pid && !clase_ignorada(&String::from_utf16_lossy(&buf[..n]))
+        }
+    };
+    if candidata {
+        let mut r = RECT::default();
+        // SAFETY: `r` es un RECT local válido.
+        if unsafe { GetWindowRect(hwnd, &mut r) }.is_ok() {
+            let marco = (r.left, r.top, r.right, r.bottom);
+            for o in rec.objetivos.iter_mut().filter(|o| !o.resuelto) {
+                if contiene(marco, o.marco) {
+                    o.tapado = true;
+                    o.resuelto = true;
+                }
+            }
+        }
+    }
+    BOOL::from(rec.objetivos.iter().any(|o| !o.resuelto))
+}
+
+/// Un solo recorrido del orden Z para todos los widgets. Un widget cuya ventana no está visible o
+/// está minimizada (aún sin mostrar, o a punto de restaurarse) cuenta como a la vista: no hay
+/// nada fiable que decir y así no se corta el arranque.
+#[cfg(windows)]
+fn calcular_visibles<'a>(app: &AppHandle, tipos: &[&'a str]) -> Vec<(&'a str, bool)> {
+    use windows::Win32::Foundation::{LPARAM, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{EnumWindows, GetWindowRect, IsIconic, IsWindowVisible};
+    let mut objetivos: Vec<Objetivo> = Vec::new();
+    for &tipo in tipos {
+        let Some(hwnd) = app.get_webview_window(&etiqueta(tipo)).and_then(|v| v.hwnd().ok()) else { continue };
+        let mut r = RECT::default();
+        // SAFETY: consultas de solo lectura sobre la ventana propia; si falla, queda «a la vista».
+        let usable = unsafe {
+            IsWindowVisible(hwnd).as_bool() && !IsIconic(hwnd).as_bool() && GetWindowRect(hwnd, &mut r).is_ok()
+        };
+        objetivos.push(Objetivo {
+            tipo,
+            hwnd,
+            marco: (r.left, r.top, r.right, r.bottom),
+            resuelto: !usable,
+            tapado: false,
+        });
+    }
+    if objetivos.iter().any(|o| !o.resuelto) {
+        let mut rec = Recorrido { objetivos: &mut objetivos, pid: std::process::id() };
+        // SAFETY: el puntero a `rec` solo se usa dentro de esta llamada síncrona. Que el callback
+        // devuelva FALSE para parar hace que EnumWindows dé error: se ignora a propósito.
+        let _ = unsafe { EnumWindows(Some(paso_enum), LPARAM(&mut rec as *mut _ as isize)) };
+    }
+    objetivos.iter().map(|o| (o.tipo, !o.tapado)).collect()
 }
 
 #[tauri::command]
@@ -572,12 +940,15 @@ pub fn quitar_widget(app: AppHandle, tipo: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn fijar_opacidad_widgets(app: AppHandle, valor: f64) {
+pub fn fijar_opacidad_widgets(app: AppHandle, valor: f64, guardar: Option<bool>) {
     let Some(est) = app.try_state::<Widgets>() else { return };
     {
         let mut d = bloquear(&est.datos);
         d.opacidad = acotar_opacidad(valor);
-        escribir(&app, &d);
+        // Mientras se arrastra el deslizador solo se aplica en vivo; el guardado llega al soltar
+        if guardar.unwrap_or(true) {
+            escribir(&app, &d);
+        }
     }
     avisar_cambio(&app);
 }
@@ -595,6 +966,9 @@ pub fn iniciar(app: &AppHandle) {
         saliendo: AtomicBool::new(false),
         encaje: Arc::new(ReboteEncaje::default()),
         rebote: Arc::new(Antirrebote::default()),
+        visibles: Mutex::new(HashMap::new()),
+        vigilando: AtomicBool::new(false),
+        barra: Mutex::new(()),
     });
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -716,6 +1090,39 @@ mod pruebas {
         d.opacidad = 0.5;
         let texto = serde_json::to_string(&d).unwrap();
         assert_eq!(interpretar(Some(&texto)), d);
+    }
+
+    #[test]
+    fn contiene_acepta_bordes_iguales_y_rechaza_un_pixel_fuera() {
+        let w = (100, 50, 300, 250);
+        assert!(contiene(w, w));
+        assert!(contiene((0, 0, 1920, 1080), w));
+        assert!(!contiene((101, 50, 300, 250), w));
+        assert!(!contiene((100, 51, 300, 250), w));
+        assert!(!contiene((100, 50, 299, 250), w));
+        assert!(!contiene((100, 50, 300, 249), w));
+        assert!(contiene((99, 49, 301, 251), w));
+    }
+
+    #[test]
+    fn contiene_con_coordenadas_negativas() {
+        // Monitor a la izquierda del principal
+        let w = (-1800, -20, -1500, 180);
+        assert!(contiene((-1920, -30, 0, 1050), w));
+        assert!(contiene(w, w));
+        assert!(!contiene((-1799, -30, 0, 1050), w));
+        assert!(!contiene((-1920, -30, -1501, 1050), w));
+        // Tapar solo en parte no es tapar
+        assert!(!contiene((-1700, -30, 0, 1050), w));
+    }
+
+    #[test]
+    fn el_escritorio_y_la_barra_de_tareas_no_tapan() {
+        for c in ["Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd"] {
+            assert!(clase_ignorada(c), "{c}");
+        }
+        assert!(!clase_ignorada("Chrome_WidgetWin_1"));
+        assert!(!clase_ignorada(""));
     }
 
     #[test]

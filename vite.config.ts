@@ -18,6 +18,7 @@ export default defineConfig({
         tarjeta: resolve(import.meta.dirname, "tarjeta.html"),
         fantasma: resolve(import.meta.dirname, "fantasma.html"),
         widget: resolve(import.meta.dirname, "widget.html"),
+        widgetsBarra: resolve(import.meta.dirname, "widgets-barra.html"),
       },
     },
   },

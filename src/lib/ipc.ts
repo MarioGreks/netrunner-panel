@@ -379,6 +379,7 @@ export type EventoPanel =
   | "widgets://estado"
   | "widgets://visible"
   | "fantasma://titulo"
+  | "fantasma://ocultar"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"

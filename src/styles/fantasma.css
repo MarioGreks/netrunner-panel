@@ -25,8 +25,11 @@ html, body { background: transparent !important; }
   flex: 1;
   background: repeating-linear-gradient(to bottom, var(--cian-tenue) 0 1px, transparent 1px 6px);
   background-size: 100% 12px;
-  animation: fan-escaneo 1s linear infinite;
 }
+/* El escaneo solo corre mientras la ventana se ve (fantasma.ts pone .fan--activo). La ventana vive oculta
+   todo el tiempo y WebView2 sigue pintando cada fotograma de una animación aunque la ventana esté
+   escondida: en bucle costaba ~3 % de CPU del equipo en reposo (renderer + gpu-process). */
+.fan--activo .fan__cuerpo { animation: fan-escaneo 1s linear infinite; }
 .fan__pie {
   padding: var(--esp-2) var(--esp-4);
   font-size: var(--tam-xs);

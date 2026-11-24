@@ -10,6 +10,11 @@ import { alEvento } from "./lib/ipc";
 iniciarTema();
 
 const titulo = document.getElementById("titulo")!;
+const marco = document.querySelector<HTMLElement>(".fan")!;
+// El título llega justo antes de enseñar la ventana: entonces arranca el escaneo, y se para al
+// ocultarla (oculta, WebView2 seguiría pintando la animación en bucle).
 void alEvento<string>("fantasma://titulo", (t) => {
   titulo.textContent = t;
+  marco.classList.add("fan--activo");
 });
+void alEvento("fantasma://ocultar", () => marco.classList.remove("fan--activo"));

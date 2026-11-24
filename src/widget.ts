@@ -17,9 +17,11 @@ import {
   type TipoWidget,
 } from "./lib/ipc";
 import { iniciarTema } from "./lib/tema";
+import { montarConsumo } from "./widgets/consumo";
 import { montarCuentas } from "./widgets/cuentas";
 import { montarReloj } from "./widgets/reloj";
 import { montarSistema } from "./widgets/sistema";
+import { montarTareas } from "./widgets/tareas";
 
 iniciarTema();
 
@@ -42,19 +44,11 @@ const TITULOS: Record<TipoWidget, string> = {
   cuentas: "CUENTAS ATRÁS",
 };
 
-/** Marcador provisional: CONSUMO y TAREAS lo sustituyen en un encargo posterior. */
-const enConstruccion: Contenido = (cuerpo) => {
-  const p = document.createElement("p");
-  p.className = "wg__marcador";
-  p.textContent = "EN CONSTRUCCIÓN";
-  cuerpo.replaceChildren(p);
-};
-
 export const CONTENIDOS: Record<TipoWidget, Contenido> = {
   reloj: montarReloj,
   sistema: montarSistema,
-  consumo: enConstruccion,
-  tareas: enConstruccion,
+  consumo: montarConsumo,
+  tareas: montarTareas,
   cuentas: montarCuentas,
 };
 

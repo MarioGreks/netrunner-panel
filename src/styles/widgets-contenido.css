@@ -1,4 +1,4 @@
-/* Contenido de los widgets de escritorio (RELOJ, CUENTAS ATRÁS, SISTEMA). Cada cuerpo es un
+/* Contenido de los widgets de escritorio (RELOJ, CUENTAS ATRÁS, SISTEMA, CONSUMO, TAREAS). Cada cuerpo es un
    contenedor de tamaño: los puntos de corte se miden sobre su área útil (sin cabecera ni relleno),
    p. ej. un widget de 320×160 deja unos 296×110 px. */
 
@@ -213,6 +213,144 @@
   .si__onda { display: block; }
 }
 
+/* ───────────── CONSUMO ───────────── */
+/* Estrecho y alto: anillos en columna. Ancho: en fila. Muy pequeño: solo los dos % en texto. */
+.co {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+.co__lim {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.co__tit { flex: none; font-size: var(--tam-xs); letter-spacing: 0.16em; color: var(--texto); opacity: 0.85; }
+.co__anillo { flex: 1 1 0; min-height: 0; aspect-ratio: 1; max-width: 100%; }
+.co__anillo .anillo { width: 100%; height: 100%; }
+.co__txt { display: none; font-size: var(--tam-s); color: var(--amarillo); letter-spacing: 0.06em; }
+.co__txt--alerta { color: var(--rojo); }
+.co__falta { flex: none; min-height: 1.2em; font-size: var(--tam-xs); letter-spacing: 0.1em; color: var(--cian); }
+.co__nd {
+  display: none;
+  margin: auto;
+  text-align: center;
+  font-size: var(--tam-s);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+.co--nd .co__lim { display: none; }
+.co--nd .co__nd { display: block; }
+
+@container wgc (min-aspect-ratio: 5/4) {
+  .co { flex-direction: row; }
+}
+/* Muy pequeño: sin anillos, «SEMANAL 42%» y «5 H 17%» en dos líneas */
+@container wgc ((max-height: 62px) or (max-width: 90px) or ((max-aspect-ratio: 5/4) and (max-height: 150px))) {
+  .co { flex-direction: column; justify-content: center; gap: 4px; }
+  .co__lim { flex: none; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .co__anillo, .co__falta { display: none; }
+  .co__txt { display: block; }
+}
+
+/* ───────────── TAREAS ───────────── */
+/* Filas de 22 px con 2 px de hueco (constantes ALTO_FILA y HUECO de tareas.ts) */
+.ta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+.ta button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-shadow: inherit; cursor: pointer; }
+.ta__cab {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--linea-neutra);
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+}
+.ta__n { color: var(--amarillo); }
+.ta__lista {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: hidden;
+}
+.ta__fila {
+  flex: none;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--tam-s);
+  color: var(--texto);
+}
+.ta__cuadro {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--amarillo);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  transition: background 0.4s linear, box-shadow 0.4s linear;
+}
+.ta__texto {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-decoration: line-through transparent;
+  transition: color 0.4s linear, text-decoration-color 0.4s linear;
+}
+.ta__fila:hover .ta__cuadro { background: var(--amarillo-tenue); }
+.ta__fila--hecha .ta__cuadro { background: var(--amarillo); }
+.ta__fila--hecha .ta__texto { color: var(--texto-tenue); text-decoration-color: var(--texto-tenue); }
+.ta__resto, .ta__mas {
+  flex: none;
+  align-self: flex-start;
+  font-size: var(--tam-xs);
+  letter-spacing: 0.14em;
+  color: var(--cian);
+}
+.ta__resto { height: 22px; }
+.ta__nueva { flex: none; min-height: 18px; display: flex; align-items: center; }
+.ta__mas { color: var(--amarillo); }
+.ta__campo {
+  width: 100%;
+  font: inherit;
+  font-size: var(--tam-s);
+  color: var(--texto);
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--amarillo);
+  outline: none;
+  padding: 2px 6px;
+  text-shadow: none;
+}
+.ta__vacio {
+  margin: auto;
+  text-align: center;
+  font-size: var(--tam-s);
+  letter-spacing: 0.14em;
+  color: var(--texto-tenue);
+}
+/* Muy bajo: sin línea «+ TAREA» */
+@container wgc (max-height: 80px) {
+  .ta__nueva { display: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .cu__barra i, .si__barra i { transition: none; }
+  .ta__cuadro, .ta__texto { transition: none; }
 }

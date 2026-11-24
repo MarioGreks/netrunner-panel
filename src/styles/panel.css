@@ -15,6 +15,11 @@ html[data-borde="left"] .cuerpo { border-right: 1px solid var(--primario); box-s
 html[data-borde="top"] .cuerpo { border-bottom: 1px solid var(--primario); box-shadow: 0 2px 14px var(--primario-tenue); }
 
 .cuerpo.oculto { opacity: 0; }
+/* Con el panel escondido no corre ninguna animación (p. ej. la onda de MÚSICA sin señal): WebView2
+   sigue pintando fotogramas en una ventana oculta y eso es CPU/GPU gastada en algo que no se ve. */
+.cuerpo.oculto *,
+.cuerpo.oculto *::before,
+.cuerpo.oculto *::after { animation-play-state: paused !important; }
 
 /* Cabecera: nombre, hora y engranaje, y debajo una franja con datos y el wireframe */
 .cabecera {

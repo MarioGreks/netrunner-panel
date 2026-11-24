@@ -377,6 +377,7 @@ export type EventoPanel =
   | "consumo://ventana"
   | "tarjetas://cambio"
   | "fantasma://titulo"
+  | "fantasma://ocultar"
   | "cuentas://estado"
   | "cuentas_ms://estado"
   | "meteo://estado"

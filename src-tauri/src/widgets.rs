@@ -13,7 +13,9 @@
 //! - Widgets tapados: un único hilo (cada 2 s, solo con widgets activos y sin modo Ocultar) mira si
 //!   alguna ventana ajena los cubre por completo y avisa a la página cuando cambia, para que no
 //!   trabaje mientras no se ve.
-//! - El contenido real de cada widget llega en otros encargos; de momento la página pinta un marcador.
+//! - Un widget nuevo se coloca en el primer hueco libre (esquina superior derecha, en columnas); si no
+//!   cabe, en cascada.
+//! - El contenido de CONSUMO y TAREAS llega en otro encargo; de momento la página pinta un marcador.
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -189,6 +191,52 @@ fn esquina_en_cascada(area: Rect, escala: f64, indice: usize, tam: (f64, f64)) -
         ancho,
         alto,
     }
+}
+
+/// Primer hueco libre del área para un widget de tamaño `tam` (físico): desde la esquina superior
+/// derecha (a `margen` del borde), recorriendo columnas de arriba abajo y luego hacia la izquierda,
+/// con el `paso` de la rejilla. Un hueco vale si no se acerca a menos de `margen` de ningún ocupado.
+fn buscar_hueco(area: Rect, ocupados: &[Geometria], tam: (u32, u32), paso: u32, margen: u32) -> Option<Geometria> {
+    let paso = paso.max(1) as i64;
+    let margen = margen as i64;
+    let (ancho, alto) = (tam.0 as i64, tam.1 as i64);
+    let (izq, arriba) = (area.x as i64 + margen, area.y as i64 + margen);
+    let (der, abajo) = (area.x as i64 + area.ancho as i64 - margen, area.y as i64 + area.alto as i64 - margen);
+    let libre = |x: i64, y: i64| {
+        ocupados.iter().all(|o| {
+            let (ox, oy) = (o.x as i64, o.y as i64);
+            x + ancho + margen <= ox
+                || ox + o.ancho as i64 + margen <= x
+                || y + alto + margen <= oy
+                || oy + o.alto as i64 + margen <= y
+        })
+    };
+    let mut x = der - ancho;
+    while x >= izq {
+        let mut y = arriba;
+        while y + alto <= abajo {
+            if libre(x, y) {
+                return Some(Geometria { x: x as i32, y: y as i32, ancho: tam.0, alto: tam.1 });
+            }
+            y += paso;
+        }
+        x -= paso;
+    }
+    None
+}
+
+/// Geometría de los widgets abiertos (los que ya tienen ventana).
+fn geometrias_abiertas(app: &AppHandle) -> Vec<Geometria> {
+    let mut v = Vec::new();
+    for (tipo, ..) in TIPOS {
+        let Some(w) = app.get_webview_window(&etiqueta(tipo)) else { continue };
+        if let (Ok(p), Ok(t)) = (w.outer_position(), w.inner_size()) {
+            if t.width > 0 && t.height > 0 {
+                v.push(Geometria { x: p.x, y: p.y, ancho: t.width, alto: t.height });
+            }
+        }
+    }
+    v
 }
 
 /// Encaja la ventana del tipo en la rejilla si no lo está ya (aplicar solo si cambia evita bucles).
@@ -464,8 +512,14 @@ fn abrir(app: &AppHandle, tipo: &str) -> Result<(), String> {
                 ancho: area.size.width,
                 alto: area.size.height,
             };
-            let indice = TIPOS.iter().position(|(t, ..)| *t == tipo).unwrap_or(0);
-            Some(esquina_en_cascada(rect, escala, indice, (ancho, alto)))
+            let tam = ((ancho * escala).round() as u32, (alto * escala).round() as u32);
+            let paso = (PASO * escala).round() as u32;
+            let margen = (MARGEN * escala).round() as u32;
+            // Primero un hueco libre; si no lo hay, la cascada de siempre
+            buscar_hueco(rect, &geometrias_abiertas(app), tam, paso, margen).or_else(|| {
+                let indice = TIPOS.iter().position(|(t, ..)| *t == tipo).unwrap_or(0);
+                Some(esquina_en_cascada(rect, escala, indice, (ancho, alto)))
+            })
         });
     match g {
         Some(g) => {
@@ -711,13 +765,20 @@ struct AvisoVisible {
 }
 
 /// ¿Está el widget a la vista? Con el modo Ocultar, no. Sin dato todavía, sí.
-#[allow(dead_code)] // lo usará el muestreador de sistema
 pub fn a_la_vista(app: &AppHandle, tipo: &str) -> bool {
     if crate::ventanas::esta_oculto() {
         return false;
     }
     app.try_state::<Widgets>()
         .map_or(true, |e| bloquear(&e.visibles).get(tipo).copied().unwrap_or(true))
+}
+
+/// ¿Está alguien mirando el widget? Su ventana existe, es visible, no está minimizada y no está
+/// tapada ni oculta. (`a_la_vista` por sí sola da «sí» también cuando el widget no está abierto.)
+pub fn mirando(app: &AppHandle, tipo: &str) -> bool {
+    app.get_webview_window(&etiqueta(tipo))
+        .is_some_and(|v| v.is_visible().unwrap_or(false) && !v.is_minimized().unwrap_or(false))
+        && a_la_vista(app, tipo)
 }
 
 #[tauri::command]
@@ -1050,6 +1111,35 @@ mod pruebas {
         // Escala 1.5 y área con origen
         let area = Rect { x: 100, y: 50, ancho: 2880, alto: 1560 };
         assert_eq!(esquina_en_cascada(area, 1.5, 1, (320.0, 160.0)), g(2410, 140, 480, 240));
+    }
+
+    fn area() -> Rect {
+        Rect { x: 0, y: 0, ancho: 1920, alto: 1040 }
+    }
+
+    #[test]
+    fn hueco_en_area_vacia_es_la_esquina_superior_derecha() {
+        assert_eq!(buscar_hueco(area(), &[], (320, 160), 20, 20), Some(g(1580, 20, 320, 160)));
+    }
+
+    #[test]
+    fn hueco_con_un_ocupado_va_debajo() {
+        let o = [g(1580, 20, 320, 160)];
+        assert_eq!(buscar_hueco(area(), &o, (320, 160), 20, 20), Some(g(1580, 200, 320, 160)));
+    }
+
+    #[test]
+    fn hueco_con_columna_llena_pasa_a_la_izquierda() {
+        let o = [g(1580, 20, 320, 1000)];
+        assert_eq!(buscar_hueco(area(), &o, (320, 160), 20, 20), Some(g(1240, 20, 320, 160)));
+    }
+
+    #[test]
+    fn hueco_con_area_llena_es_none() {
+        let o = [g(0, 0, 1920, 1040)];
+        assert_eq!(buscar_hueco(area(), &o, (320, 160), 20, 20), None);
+        // Un widget más grande que el área tampoco cabe
+        assert_eq!(buscar_hueco(area(), &[], (2000, 160), 20, 20), None);
     }
 
     #[test]

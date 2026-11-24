@@ -4,6 +4,7 @@ import "./styles/tokens.css";
 import "./styles/temas.css";
 import "./styles/hud.css";
 import "./styles/widget.css";
+import "./styles/widgets-contenido.css";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   alEstadoWidgets,
@@ -16,6 +17,9 @@ import {
   type TipoWidget,
 } from "./lib/ipc";
 import { iniciarTema } from "./lib/tema";
+import { montarCuentas } from "./widgets/cuentas";
+import { montarReloj } from "./widgets/reloj";
+import { montarSistema } from "./widgets/sistema";
 
 iniciarTema();
 
@@ -38,7 +42,7 @@ const TITULOS: Record<TipoWidget, string> = {
   cuentas: "CUENTAS ATRÁS",
 };
 
-/** Marcador provisional: los encargos siguientes sustituyen cada entrada por el widget real. */
+/** Marcador provisional: CONSUMO y TAREAS lo sustituyen en un encargo posterior. */
 const enConstruccion: Contenido = (cuerpo) => {
   const p = document.createElement("p");
   p.className = "wg__marcador";
@@ -47,11 +51,11 @@ const enConstruccion: Contenido = (cuerpo) => {
 };
 
 export const CONTENIDOS: Record<TipoWidget, Contenido> = {
-  reloj: enConstruccion,
-  sistema: enConstruccion,
+  reloj: montarReloj,
+  sistema: montarSistema,
   consumo: enConstruccion,
   tareas: enConstruccion,
-  cuentas: enConstruccion,
+  cuentas: montarCuentas,
 };
 
 const tipo = (new URLSearchParams(location.search).get("tipo") ?? "") as TipoWidget;

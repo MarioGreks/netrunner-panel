@@ -1,0 +1,218 @@
+/* Contenido de los widgets de escritorio (RELOJ, CUENTAS ATRÁS, SISTEMA). Cada cuerpo es un
+   contenedor de tamaño: los puntos de corte se miden sobre su área útil (sin cabecera ni relleno),
+   p. ej. un widget de 320×160 deja unos 296×110 px. */
+
+.wgc {
+  container-type: size;
+  container-name: wgc;
+  cursor: pointer;
+  font-family: var(--fuente-datos);
+  font-variant-numeric: tabular-nums;
+  /* Sobre el fondo de pantalla (claro u oscuro, y con poca opacidad) el texto necesita su sombra */
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.7);
+  /* Los hijos ocupan todo el cuerpo (el cuerpo base centra) */
+  place-items: stretch;
+}
+.wgc > * { width: 100%; height: 100%; min-width: 0; min-height: 0; }
+
+/* Barras finas comunes (CUENTAS y SISTEMA) */
+.cu__barra, .si__barra {
+  position: relative;
+  height: 3px;
+  /* Carril visible también sobre fondos claros */
+  background: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.cu__barra i, .si__barra i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--cian);
+  transition: width 0.4s linear;
+}
+
+/* ───────────── RELOJ ───────────── */
+/* Pequeño: hora y fecha. ≥ 70 px de alto: + tiempo. ≥ 104: + próximo evento. ≥ 160: + 2 siguientes. */
+.rl {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  overflow: hidden;
+}
+.rl__hora {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1;
+}
+.rl__hm {
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  font-size: clamp(20px, min(15cqw, 46cqh), 64px);
+  letter-spacing: 0.04em;
+  color: var(--amarillo);
+  text-shadow: 0 0 8px var(--amarillo-tenue);
+}
+.rl__seg {
+  font-family: var(--fuente-titulo);
+  font-size: clamp(10px, min(6cqw, 18cqh), 20px);
+  letter-spacing: 0.08em;
+  color: var(--cian);
+}
+.rl__linea {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--tam-s);
+  letter-spacing: 0.12em;
+  color: var(--texto);
+  opacity: 0.85;
+}
+.rl__fecha { white-space: nowrap; }
+.rl__meteo {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  color: var(--cian);
+}
+.rl__icono { color: var(--cian); }
+.rl__nd { color: var(--texto-tenue); opacity: 0.7; }
+.rl__prox, .rl__sig { display: none; }
+.rl__sig { flex-direction: column; gap: 2px; }
+.rl__ev {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--tam-s);
+  white-space: nowrap;
+}
+.rl__ev--sig { font-size: var(--tam-xs); opacity: 0.8; }
+.rl__cuadro {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: var(--cat, var(--amarillo));
+}
+.rl__cuando { flex: none; color: var(--amarillo); letter-spacing: 0.06em; }
+.rl__titulo { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--texto); }
+.rl__ev--alerta .rl__cuando { color: var(--rojo); }
+.rl__ev--vacio { color: var(--texto-tenue); letter-spacing: 0.12em; }
+.rl__ev--vacio .rl__titulo { color: var(--texto-tenue); }
+
+@container wgc (min-height: 70px) {
+  .rl__meteo { display: flex; }
+}
+@container wgc (min-height: 104px) {
+  .rl__prox { display: block; margin-top: 2px; padding-top: 4px; border-top: 1px solid var(--linea-neutra); }
+}
+@container wgc (min-height: 160px) {
+  .rl__sig { display: flex; }
+}
+
+/* ───────────── CUENTAS ATRÁS ───────────── */
+/* Filas de 36 px con 4 px de hueco (constantes ALTO_FILA y HUECO de cuentas.ts) */
+.cu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+.cu__fila {
+  flex: none;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+}
+.cu__cabeza {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--tam-s);
+}
+.cu__cuadro {
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  background: var(--cat, var(--amarillo));
+}
+.cu__titulo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto); }
+.cu__valor { flex: none; color: var(--amarillo); letter-spacing: 0.04em; }
+.cu__fila--alerta .cu__valor { color: var(--rojo); }
+.cu__fila--alerta .cu__barra i { background: var(--rojo); }
+.cu__vacio {
+  margin: auto;
+  text-align: center;
+  font-size: var(--tam-s);
+  letter-spacing: 0.14em;
+  line-height: 1.6;
+  color: var(--texto-tenue);
+}
+
+/* ───────────── SISTEMA ───────────── */
+/* Siempre CPU, RAM y GPU. ≥ 110 px de alto: + discos (2 columnas con ≥ 240 px de ancho).
+   ≥ 130: + batería. ≥ 190: + gráfica de CPU de 2 minutos. */
+.si {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+.si--viejo { opacity: 0.45; filter: saturate(0.5); }
+.si__medidas, .si__discos { display: flex; flex-direction: column; gap: 5px; }
+.si__fila {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--tam-xs);
+  line-height: 1.2;
+}
+.si__etq { letter-spacing: 0.12em; color: var(--texto); opacity: 0.8; }
+.si__val { min-width: 4ch; text-align: right; color: var(--amarillo); letter-spacing: 0.04em; }
+.si__fila--alta .si__val { color: var(--rojo); }
+.si__fila--alta .si__barra i { background: var(--rojo); }
+.si__fila--nd .si__val { color: var(--texto-tenue); }
+.si__discos, .si__bat { display: none; }
+.si__bat {
+  align-items: baseline;
+  gap: 8px;
+  font-size: var(--tam-xs);
+}
+.si__bat[hidden] { display: none !important; }
+.si__sub { color: var(--cian); letter-spacing: 0.1em; }
+.si__bat--baja .si__val { color: var(--rojo); }
+.si__onda {
+  display: none;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 36px;
+  border-top: 1px solid var(--linea-neutra);
+}
+
+@container wgc (min-height: 110px) {
+  .si__discos { display: flex; }
+}
+@container wgc (min-height: 110px) and (min-width: 240px) {
+  .si__discos { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 14px; }
+  .si__disco { grid-template-columns: 22px minmax(0, 1fr) auto; gap: 6px; }
+}
+@container wgc (min-height: 130px) {
+  .si__bat { display: flex; }
+}
+@container wgc (min-height: 190px) {
+  .si__onda { display: block; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cu__barra i, .si__barra i { transition: none; }
+}

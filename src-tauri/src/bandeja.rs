@@ -10,9 +10,20 @@ use crate::actualizador;
 use crate::config;
 use crate::estado::Estado;
 use crate::ventanas;
+use crate::widgets;
 
 /// Elemento «Ocultar / Mostrar Netrunner Panel»: su texto sigue al estado de `ventanas`.
 struct ItemOcultar(MenuItem<tauri::Wry>);
+
+/// Casilla «Editar widgets»: se sincroniza con el modo edición de `widgets`.
+struct ItemEdicion(CheckMenuItem<tauri::Wry>);
+
+/// Pone al día la casilla cuando el modo edición cambia desde otro sitio.
+pub fn actualizar_edicion(app: &AppHandle, activa: bool) {
+    if let Some(item) = app.try_state::<ItemEdicion>() {
+        let _ = item.0.set_checked(activa);
+    }
+}
 
 pub fn etiqueta_ocultar(oculto: bool) -> &'static str {
     if oculto {
@@ -36,6 +47,8 @@ pub fn crear(app: &AppHandle) -> tauri::Result<()> {
     let ajustes = MenuItem::with_id(app, "ajustes", "Ajustes", true, None::<&str>)?;
     let pausa = CheckMenuItem::with_id(app, "pausa", "Pausar apertura por borde", true, pausado, None::<&str>)?;
     let actualizar = MenuItem::with_id(app, "actualizar", "Buscar actualizaciones", true, None::<&str>)?;
+    let edicion = CheckMenuItem::with_id(app, "widgets_editar", "Editar widgets", true, widgets::edicion_activa(app), None::<&str>)?;
+    app.manage(ItemEdicion(edicion.clone()));
     let ocultar = MenuItem::with_id(app, "ocultar", etiqueta_ocultar(ventanas::esta_oculto()), true, None::<&str>)?;
     app.manage(ItemOcultar(ocultar.clone()));
     let salir = MenuItem::with_id(app, "salir", "Salir", true, None::<&str>)?;
@@ -43,7 +56,7 @@ pub fn crear(app: &AppHandle) -> tauri::Result<()> {
     let separador2 = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(
         app,
-        &[&abrir, &ajustes, &pausa, &separador, &actualizar, &ocultar, &separador2, &salir],
+        &[&abrir, &ajustes, &pausa, &separador, &actualizar, &edicion, &ocultar, &separador2, &salir],
     )?;
 
     let casilla = pausa.clone();
@@ -63,6 +76,7 @@ pub fn crear(app: &AppHandle) -> tauri::Result<()> {
                 config::fijar_pausa(app, activo);
             }
             "actualizar" => actualizador::buscar_desde_bandeja(app),
+            "widgets_editar" => widgets::fijar_edicion(app, !widgets::edicion_activa(app)),
             "ocultar" => ventanas::fijar_oculto(app, !ventanas::esta_oculto()),
             "salir" => app.exit(0),
             _ => {}

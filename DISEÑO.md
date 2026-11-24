@@ -31,6 +31,15 @@
 - Animación **viva pero contenida**: entrada con glitch o escaneo, gráficas en movimiento y algún wireframe 3D ligero.
 - Tipografía: **Orbitron** para los títulos y **JetBrains Mono** para los datos, incluidas en la app.
 
+## Widgets de escritorio
+- Viven en una capa de escritorio: cada ventana tiene como dueño a Progman y se coloca justo encima de él. Quedan por debajo de las demás ventanas y se ven con Win+D.
+- Una ventana por widget, y solo uno de cada tipo.
+- La edición se activa desde la bandeja. Una barra con el catálogo permite añadir, quitar, ajustar la opacidad y salir con LISTO o Esc.
+- Rejilla de 20 px para mover y redimensionar, con un tamaño mínimo por tipo.
+- Marco HUD semitransparente. El texto lleva sombra para leerse sobre cualquier fondo.
+- Con el widget tapado o la app en modo Ocultar, el contenido deja de trabajar: sin temporizadores y sin repintar. Al volver a verse se repinta al instante.
+- Los datos llegan por eventos. El sistema se mide cada 3 s cuando solo lo mira el widget.
+
 ## Fuera de la v1
 - Escribir en el calendario (Microsoft Graph).
 - Microsoft To Do y la API de Spotify.

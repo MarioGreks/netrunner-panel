@@ -19,9 +19,10 @@ mod sistema;
 mod sync;
 mod tarjetas;
 mod ventanas;
+mod widgets;
 
 use estado::Estado;
-use tauri::{Manager, WindowEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -65,6 +66,12 @@ pub fn run() {
             tarjetas::fantasma_mostrar,
             tarjetas::fantasma_mover,
             tarjetas::fantasma_ocultar,
+            widgets::widgets_estado,
+            widgets::fijar_edicion_widgets,
+            widgets::anadir_widget,
+            widgets::quitar_widget,
+            widgets::fijar_opacidad_widgets,
+            widgets::widget_a_la_vista,
             consumo::detalle_consumo,
             consumo::historico_vista::historico_consumo,
             consumo::historico_vista::semanas_archivadas,
@@ -150,6 +157,7 @@ pub fn run() {
             // Siempre arranca solo con la pestaña (con o sin --oculto)
             ventanas::preparar(&handle);
             tarjetas::iniciar(&handle);
+            widgets::iniciar(&handle);
             ventanas::iniciar_deteccion(handle);
             Ok(())
         })
@@ -165,6 +173,13 @@ pub fn run() {
                 }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error al ejecutar netrunner-panel");
+        .build(tauri::generate_context!())
+        .expect("error al construir netrunner-panel")
+        .run(|app, evento| {
+            // Al salir las ventanas se destruyen: que los widgets no se recreen como si Explorer
+            // se hubiera reiniciado
+            if matches!(evento, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+                widgets::marcar_salida(app);
+            }
+        });
 }

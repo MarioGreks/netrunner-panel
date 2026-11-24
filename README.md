@@ -64,11 +64,19 @@ Abre el panel y pulsa el engranaje para entrar en AJUSTES.
 - **OneDrive.** En NOTAS de AJUSTES, elige una carpeta de OneDrive para sincronizar las notas entre equipos. Sin ella, las notas se quedan solo en este equipo.
 - **Palabras clave y VIP.** En CORREO de AJUSTES, añade remitentes VIP (una dirección o un dominio) y palabras clave del asunto o del remitente. Sin filtros, la pestaña CORREO no muestra nada.
 
+**WIDGETS**
+- Cinco widgets de escritorio: RELOJ, CUENTAS ATRÁS, SISTEMA, CONSUMO y TAREAS. Puede haber uno de cada tipo.
+- Viven pegados al escritorio, por debajo de las demás ventanas. Se ven con Win+D.
+- Para añadirlos: bandeja → Editar widgets → catálogo. En el modo edición se mueven y se redimensionan, con encaje a una rejilla de 20 px.
+- Desde la barra de edición se ajusta la opacidad. Se sale con LISTO o con Esc.
+- Un widget tapado por otra ventana no se actualiza hasta que vuelve a verse. El modo Ocultar también los esconde.
+
 ## Privacidad
 
 Los datos personales no salen de tu equipo salvo para hablar con los servicios que se indican abajo.
 
 **Qué se guarda y dónde**
+- Los widgets colocados, su posición, tamaño y opacidad se guardan en `widgets.json`, en esa misma carpeta.
 - La configuración (incluida la URL ICS), las notas, los accesos, las cuentas atrás y las últimas copias del tiempo y de la agenda se guardan solo en tu carpeta de datos de la aplicación, en AppData. Desde AJUSTES puedes abrir esa carpeta.
 - Si sincronizas las notas, se copian además en la carpeta de OneDrive que elijas.
 - Si usas la conexión con Microsoft Graph, los tokens se guardan en el Administrador de credenciales de Windows, nunca en archivos de configuración.
@@ -124,9 +132,11 @@ gh release create v<versión> release/Netrunner-Panel-Setup.exe release/latest.j
 ```
 index.html, tab.html   ventanas del panel y de la miniventana
 consumo.html           ventana flotante de CONSUMO (y aviso-consumo.html, sus avisos)
+widget.html            ventana de un widget de escritorio (y widgets-barra.html, la barra de edición)
 src/                   interfaz en TypeScript y CSS
   lib/                 IPC con Rust, temas, categorías, navegación
   modulos/             una vista por pestaña (tiempo, correo, accesos, notas, sistema, consumo, ajustes)
+  widgets/             el contenido de cada widget de escritorio (reloj, cuentas, sistema, consumo, tareas)
   styles/              estilos y temas de color
   ui/                  componentes comunes (pestañas, formularios, gráfica, resumen)
 src-tauri/             núcleo en Rust

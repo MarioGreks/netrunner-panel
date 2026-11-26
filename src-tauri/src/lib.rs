@@ -10,6 +10,7 @@ mod estado;
 mod interfaz;
 mod meteo;
 mod microsoft;
+mod movil;
 mod musica;
 mod notas;
 mod outlook;
@@ -127,6 +128,10 @@ pub fn run() {
             actualizador::info_actualizacion,
             actualizador::instalar_actualizacion,
             actualizador::posponer_actualizacion,
+            movil::estado_movil,
+            movil::activar_movil,
+            movil::nuevo_codigo_movil,
+            movil::desvincular_movil,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
@@ -147,6 +152,7 @@ pub fn run() {
             accesos::iniciar(&handle);
             outlook::iniciar(&handle);
             actualizador::iniciar(&handle);
+            movil::iniciar(&handle);
             bandeja::crear(&handle)?;
             // Las ventanas se crean aquí, con todo el estado ya registrado («create»: false en
             // tauri.conf.json): si Tauri las creaba antes del setup, la interfaz compilada podía

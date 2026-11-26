@@ -1,4 +1,4 @@
-// Pantalla AJUSTES: apariencia, panel, calendario, correo, cuentas (avanzado), meteo, sincronización entre equipos, consumo de Claude y sistema. No es una pestaña de la
+// Pantalla AJUSTES: apariencia, panel, calendario, correo, cuentas (avanzado), meteo, sincronización entre equipos, conexión móvil, consumo de Claude y sistema. No es una pestaña de la
 // barra: se abre con el engranaje de la cabecera y se cierra con VOLVER o Esc.
 import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -9,7 +9,11 @@ import {
   alEvento,
   buscarActualizacion,
   datosConsumo,
+  activarMovil,
+  desvincularMovil,
   diagnosticoConsumo,
+  estadoMovil,
+  nuevoCodigoMovil,
   guardarAjustesConsumo,
   instalarPluginConsumo,
   obtenerConfig,
@@ -64,6 +68,7 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
       </details>
       ${seccion("meteo", "METEO", "GEO // 0x04", "marco--cian")}
       ${seccion("notas", "SINCRONIZACIÓN ENTRE EQUIPOS", "SYNC // 0x05")}
+      ${seccion("movil", "CONEXIÓN MÓVIL", "MOB // 0x09", "marco--cian")}
       ${seccion("consumo", "CONSUMO DE CLAUDE", "CLD // 0x08")}
       ${seccion("sistema", "SISTEMA", "SYS // 0x06")}
     </div>`;
@@ -277,6 +282,66 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
   }).then((un) => {
     if (vivo) unlistens.push(un);
     else un();
+  });
+
+  // --- CONEXIÓN MÓVIL: servidor local para la app del móvil ---
+  q("movil").innerHTML = `
+    <div class="fm">
+      <label class="ajs__casilla ajs__casilla--primera">
+        <input type="checkbox" data-id="mov-activo" />
+        <span class="ajs__marca" aria-hidden="true"></span>
+        <span>ACTIVAR</span>
+      </label>
+      <div data-id="mov-detalle" hidden>
+        <div class="ajs__dato"><span class="fm__etiqueta">IP: <span class="ajs__valor" data-id="mov-ip">—</span></span><span class="fm__etiqueta">PUERTO: <span class="ajs__valor" data-id="mov-puerto">—</span></span></div>
+        <div class="ajs__dato"><span class="fm__etiqueta">ESTADO</span><span class="ajs__valor" data-id="mov-estado">SIN EMPAREJAR</span></div>
+        <div class="ajs__codigo" data-id="mov-codigo" hidden>
+          <span class="ajs__codigo-num" data-id="mov-codigo-num"></span>
+          <span class="fm__ayuda" data-id="mov-codigo-t"></span>
+        </div>
+        <div class="fm__fila">
+          <button class="fm__btn" data-id="mov-emparejar" type="button">EMPAREJAR MÓVIL</button>
+          <button class="fm__btn fm__btn--peligro" data-id="mov-desvincular" type="button" hidden>DESVINCULAR</button>
+        </div>
+      </div>
+      <div class="fm__aviso fm__aviso--error" data-id="mov-error"></div>
+      <div class="fm__ayuda">ÚSALO SOLO EN REDES DE CONFIANZA (CASA): LOS DATOS VIAJAN SIN CIFRAR POR TU WIFI.</div>
+      <div class="fm__ayuda">LA PRIMERA VEZ, WINDOWS PREGUNTARÁ SI PERMITES EL ACCESO A LA RED: PULSA PERMITIR.</div>
+    </div>`;
+  const movActivo = q<HTMLInputElement>("mov-activo");
+  const movDetalle = q("mov-detalle");
+  const movCodigo = q("mov-codigo");
+  const movDesvincular = q("mov-desvincular");
+  const pintarMovil = (e: Awaited<ReturnType<typeof estadoMovil>>) => {
+    movActivo.checked = e.activo;
+    movDetalle.hidden = !e.activo;
+    q("mov-ip").textContent = e.ip ?? "—";
+    q("mov-puerto").textContent = String(e.puerto);
+    q("mov-estado").textContent = e.emparejado ? "EMPAREJADO" : "SIN EMPAREJAR";
+    movDesvincular.hidden = !e.emparejado;
+    movCodigo.hidden = e.codigo === null;
+    if (e.codigo !== null) {
+      q("mov-codigo-num").textContent = e.codigo;
+      q("mov-codigo-t").textContent = `CAMBIA EN ${e.cambia_en_s ?? 0} S`;
+    }
+    q("mov-error").textContent = e.error ?? "";
+  };
+  const refrescarMovil = () => estadoMovil().then((e) => vivo && pintarMovil(e)).catch(() => {});
+  const falloMovil = (e: unknown) => vivo && (q("mov-error").textContent = String(e));
+  void refrescarMovil();
+  // La cuenta atrás y el emparejamiento (lo hace el móvil) se ven consultando cada segundo
+  const relojMovil = window.setInterval(() => void refrescarMovil(), 1000);
+  movActivo.addEventListener("change", () => {
+    activarMovil(movActivo.checked).then(refrescarMovil).catch((e) => {
+      movActivo.checked = !movActivo.checked;
+      falloMovil(e);
+    });
+  });
+  q("mov-emparejar").addEventListener("click", () => {
+    nuevoCodigoMovil().then(refrescarMovil).catch(falloMovil);
+  });
+  movDesvincular.addEventListener("click", () => {
+    desvincularMovil().then(refrescarMovil).catch(falloMovil);
   });
 
   // --- SISTEMA: versión y datos locales ---
@@ -506,6 +571,7 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
     if (!vivo) return;
     vivo = false;
     window.removeEventListener("keydown", alTeclear);
+    window.clearInterval(relojMovil);
     unlistens.forEach((u) => u());
     formularios.forEach((f) => f.destruir());
   };

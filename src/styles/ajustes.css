@@ -87,6 +87,9 @@
 .ajs__casilla input:checked + .ajs__marca::after { opacity: 1; }
 .ajs__casilla input:focus-visible + .ajs__marca { outline: 1px solid var(--cian); outline-offset: 2px; }
 
+.ajs__casilla--primera { margin-top: 0; }
+.ajs__codigo { margin-top: var(--esp-3); text-align: center; }
+.ajs__codigo-num { display: block; font-size: 28px; letter-spacing: 0.3em; color: var(--amarillo); text-shadow: 0 0 8px var(--amarillo-tenue); user-select: text; }
 .ajs__dato { display: flex; align-items: baseline; justify-content: space-between; }
 .ajs__dato .fm__etiqueta { margin: 0; }
 .ajs__valor { font-size: var(--tam-s); color: var(--amarillo); }

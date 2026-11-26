@@ -39,7 +39,28 @@ export interface Config {
   correo_palabras: string[];
   /** Etiqueta de cada cuenta de Outlook (de DisplayName a etiqueta). */
   etiquetas_cuentas_correo: Record<string, string>;
+  /** Conexión móvil: solo local. El token lo gestiona Rust (secreto, no se muestra). */
+  movil_activo: boolean;
+  movil_puerto: number;
+  movil_token: string | null;
 }
+
+export interface EstadoMovil {
+  activo: boolean;
+  puerto: number;
+  ip: string | null;
+  emparejado: boolean;
+  /** Código de emparejamiento vigente (6 cifras) y segundos que le quedan. */
+  codigo: string | null;
+  /** Segundos hasta que el código cambie (rota cada 15 s). */
+  cambia_en_s: number | null;
+  error: string | null;
+}
+
+export const estadoMovil = () => invoke<EstadoMovil>("estado_movil");
+export const activarMovil = (activo: boolean) => invoke<void>("activar_movil", { activo });
+export const nuevoCodigoMovil = () => invoke<string>("nuevo_codigo_movil");
+export const desvincularMovil = () => invoke<void>("desvincular_movil");
 
 export const obtenerConfig = () => invoke<Config>("get_config");
 export const guardarConfig = (config: Config) => invoke<void>("set_config", { config });

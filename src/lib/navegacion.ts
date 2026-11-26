@@ -1,5 +1,5 @@
 // Navegación entre vistas del panel. Los módulos piden abrir AJUSTES sin conocer a main.ts.
-const SECCIONES = ["apariencia", "panel", "calendario", "correo", "cuentas", "meteo", "notas", "consumo", "sistema"] as const;
+const SECCIONES = ["apariencia", "panel", "calendario", "correo", "cuentas", "meteo", "notas", "movil", "consumo", "sistema"] as const;
 export type SeccionAjustes = (typeof SECCIONES)[number];
 
 /** Una sección válida de AJUSTES (lo que llega por eventos del núcleo no está tipado). */

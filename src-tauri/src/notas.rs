@@ -187,6 +187,19 @@ fn modificar(app: &AppHandle, cambio: impl FnOnce(&mut Datos)) -> Result<(), Str
     Ok(())
 }
 
+/// Aplica los datos recibidos del móvil: `purgar(fusionar(local, recibido))` por el mismo
+/// camino que los comandos. Devuelve los Datos completos (con marcas) resultantes.
+pub fn fusionar_desde_movil(app: &AppHandle, recibido: Datos) -> Result<Datos, String> {
+    let mut resultado = Datos::default();
+    modificar(app, |d| {
+        let mut f = fusionar(d, &recibido);
+        purgar(&mut f, ahora_ms());
+        resultado = f.clone();
+        *d = f;
+    })?;
+    Ok(resultado)
+}
+
 /// Programa una sincronización 2 s después del último cambio (de cualquier módulo).
 pub(crate) fn programar_sync(app: &AppHandle) {
     if carpeta_configurada(app).is_none() {

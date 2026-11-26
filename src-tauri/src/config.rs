@@ -78,6 +78,11 @@ pub struct Config {
     pub correo_palabras: Vec<String>,
     /// Etiqueta elegida para cada cuenta de Outlook (de `DisplayName` a etiqueta).
     pub etiquetas_cuentas_correo: HashMap<String, String>,
+    /// Conexión móvil (servidor HTTP en la red local). Solo local: no se sincroniza entre equipos.
+    pub movil_activo: bool,
+    pub movil_puerto: u16,
+    /// Token del móvil emparejado. Secreto: nunca a logs ni a errores.
+    pub movil_token: Option<String>,
 }
 
 pub const OPACIDAD_MIN: f64 = 0.55;
@@ -102,6 +107,9 @@ impl Default for Config {
             correo_vip: Vec::new(),
             correo_palabras: Vec::new(),
             etiquetas_cuentas_correo: HashMap::new(),
+            movil_activo: false,
+            movil_puerto: crate::movil::PUERTO_DEFECTO,
+            movil_token: None,
         }
     }
 }
@@ -215,6 +223,8 @@ pub fn aplicar(app: &AppHandle, origen: Origen, cambio: impl FnOnce(&Config) -> 
         // Las cuentas las gestiona solo el módulo Microsoft: un formulario con una copia
         // antigua de la configuración no debe pisarlas.
         config.cuentas_ms = actual.cuentas_ms.clone();
+        // El token del móvil lo gestiona solo el módulo movil (emparejar/desvincular).
+        config.movil_token = actual.movil_token.clone();
         guardar(app, &config)?;
         (std::mem::replace(&mut *actual, config.clone()), config)
     };
@@ -339,7 +349,8 @@ mod pruebas {
         assert_eq!(c.cuentas_ms[0].correo, "x@example.com");
         assert_eq!(c.cuentas_ms[0].etiqueta, "");
         let json = serde_json::to_string(&c).unwrap();
-        assert!(!json.contains("token"));
+        // (movil_token es el del móvil, no de Microsoft)
+        assert!(!json.contains("refresh_token") && !json.contains("access_token"));
     }
 
     #[test]
@@ -364,6 +375,14 @@ mod pruebas {
         assert_eq!(c.correo_vip, vec!["A@example.com", "example.org"]);
         assert_eq!(c.etiquetas_cuentas_correo.len(), 1);
         assert_eq!(c.etiquetas_cuentas_correo["Y"], "UNI");
+    }
+
+    #[test]
+    fn config_antigua_sin_campos_moviles() {
+        let c: Config = serde_json::from_str(r#"{"edge":"left"}"#).unwrap();
+        assert!(!c.movil_activo);
+        assert_eq!(c.movil_puerto, 47821);
+        assert!(c.movil_token.is_none());
     }
 
     #[test]

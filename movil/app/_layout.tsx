@@ -2,6 +2,7 @@ import { JetBrainsMono_400Regular, JetBrainsMono_700Bold } from '@expo-google-fo
 import { Orbitron_400Regular, Orbitron_700Bold, useFonts } from '@expo-google-fonts/orbitron';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { ConexionProvider } from '../src/ConexionContext';
 import { tema } from '../src/theme';
 
 export default function Layout() {
@@ -10,7 +11,9 @@ export default function Layout() {
   return (
     <>
       <StatusBar style="light" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: tema.colores.fondo } }} />
+      <ConexionProvider>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: tema.colores.fondo } }} />
+      </ConexionProvider>
     </>
   );
 }

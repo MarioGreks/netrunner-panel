@@ -21,38 +21,12 @@ import { iconoMeteo } from "./lib/iconos-meteo";
 import { colorCategoria } from "./lib/categorias";
 import { proximo } from "./ui/resumen";
 import { dos, esc, recortar } from "./lib/texto";
+import { cuandoEvento, fechaCorta, restante, restanteCorto } from "./lib/tiempo-texto";
 
-const DIAS = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"];
-const MESES = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-const MIN_ALERTA = 15;
 /** Tiempo con el ratón encima antes de abrir el panel. */
 const ESPERA_HOVER = 300;
 /** Tras cerrarse el panel la ventana reaparece bajo el cursor: no se reabre por hover enseguida. */
 const GUARDA_CIERRE = 1200;
-
-const inicioDeDia = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-
-/** «23D 04H 12M»; sin días «04H 12M»; sin horas «12M». */
-function restante(ms: number): string {
-  const min = Math.max(0, Math.floor(ms / 60000));
-  const d = Math.floor(min / 1440);
-  const h = Math.floor((min % 1440) / 60);
-  const m = min % 60;
-  if (d > 0) return `${d}D ${dos(h)}H ${dos(m)}M`;
-  if (h > 0) return `${dos(h)}H ${dos(m)}M`;
-  return `${dos(m)}M`;
-}
-
-/** Para las filas compactas: «12D 03H»; con menos de un día «03H 20M»; con menos de una hora «20M». */
-function restanteCorto(ms: number): string {
-  const min = Math.max(0, Math.floor(ms / 60000));
-  const d = Math.floor(min / 1440);
-  const h = Math.floor((min % 1440) / 60);
-  const m = min % 60;
-  if (d > 0) return `${d}D ${dos(h)}H`;
-  if (h > 0) return `${dos(h)}H ${dos(m)}M`;
-  return `${dos(m)}M`;
-}
 
 /** Cuentas atrás que se muestran: la más cercana en grande y hasta 3 más en filas; el resto, «+N MÁS». */
 const MAX_FILAS = 3;
@@ -92,20 +66,9 @@ const pintarAgenda = () => {
   let alerta = false;
   let color = "";
   if (ev) {
-    const ini = new Date(ev.inicio);
-    let cuando: string;
-    if (ev.todo_el_dia) {
-      cuando = "HOY";
-    } else if (ini.getTime() <= ahora.getTime()) {
-      cuando = "AHORA";
-    } else {
-      const hoy = inicioDeDia(ahora);
-      const dia = inicioDeDia(ini);
-      const hora = `${dos(ini.getHours())}:${dos(ini.getMinutes())}`;
-      cuando = dia === hoy ? hora : dia === hoy + 86400000 ? `MAÑ ${hora}` : `${ini.getDate()} ${MESES[ini.getMonth()]}`;
-      alerta = ini.getTime() - ahora.getTime() < MIN_ALERTA * 60000;
-    }
-    texto = `${cuando} · ${ev.titulo}`;
+    const c = cuandoEvento(ev, ahora);
+    alerta = c.alerta;
+    texto = `${c.texto} · ${ev.titulo}`;
     color = ev.categorias.length ? colorCategoria(ev.categorias[0]) : "";
   }
   elProxTexto.textContent = texto;
@@ -171,7 +134,7 @@ const pintarReloj = () => {
   const ahora = new Date();
   elHm.textContent = `${dos(ahora.getHours())}:${dos(ahora.getMinutes())}`;
   elSeg.textContent = dos(ahora.getSeconds());
-  const fecha = `${DIAS[ahora.getDay()]} ${ahora.getDate()} ${MESES[ahora.getMonth()]}`;
+  const fecha = fechaCorta(ahora);
   if (fecha !== fechaPintada) {
     fechaPintada = fecha;
     elFecha.textContent = fecha;

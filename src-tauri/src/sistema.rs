@@ -1,7 +1,8 @@
 //! Módulo SISTEMA: muestreo de CPU, RAM, GPU, discos y batería.
 //!
 //! Un hilo mide cada segundo y emite `sistema://muestra`, pero solo mientras el panel
-//! está visible (o hay una ventana tarjeta-sistema a la vista); si nadie mira duerme sin medir. El comando `muestra_sistema`
+//! está visible (o hay una ventana tarjeta-sistema a la vista); si solo mira el widget de escritorio
+//! mide cada 3 s; si nadie mira duerme sin medir. El comando `muestra_sistema`
 //! devuelve una muestra al momento para pintar en cuanto se abre el panel.
 
 use std::collections::{HashMap, VecDeque};
@@ -46,6 +47,8 @@ pub struct MuestraSistema {
 
 /// Muestras que guarda el historial: 10 minutos a una por segundo.
 const MAX_HISTORIAL: usize = 600;
+/// Segundos entre muestras cuando solo mira el widget de escritorio.
+const PERIODO_WIDGET: u64 = 3;
 /// Procesos que se devuelven por cada criterio (CPU y RAM).
 const TOP_PROCESOS: usize = 8;
 
@@ -361,14 +364,19 @@ fn ventana_sistema_a_la_vista(app: &AppHandle) -> bool {
 pub fn iniciar(app: &AppHandle) {
     app.manage(Mutex::new(Muestreador::nuevo()));
     let handle = app.clone();
+    let mut segundos: u64 = 0;
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(1));
+        segundos = segundos.wrapping_add(1);
         let visible = handle
             .state::<Estado>()
             .panel_visible
             .load(Ordering::Relaxed);
         if !visible && !ventana_sistema_a_la_vista(&handle) {
-            continue; // nadie mira: no se mide
+            // Solo mira el widget: basta una muestra cada 3 s
+            if !crate::widgets::mirando(&handle, "sistema") || segundos % PERIODO_WIDGET != 0 {
+                continue; // nadie mira (o toca esperar): no se mide
+            }
         }
         let muestra = {
             let estado = handle.state::<Mutex<Muestreador>>();

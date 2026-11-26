@@ -232,6 +232,7 @@ pub fn fijar_oculto(app: &AppHandle, valor: bool) {
     if OCULTO.swap(valor, Ordering::SeqCst) == valor {
         return;
     }
+    crate::widgets::fijar_oculto(app, valor);
     if valor {
         if let Some(t) = app.get_webview_window("tab") {
             let _ = t.hide();
@@ -247,6 +248,7 @@ pub fn fijar_oculto(app: &AppHandle, valor: bool) {
 pub fn mostrar_panel(app: &AppHandle) {
     // Abrir el panel a propósito (bandeja, acceso directo, segunda instancia) desoculta la app
     if OCULTO.swap(false, Ordering::SeqCst) {
+        crate::widgets::fijar_oculto(app, false);
         crate::bandeja::actualizar_oculto(app);
     }
     let estado = app.state::<Estado>();

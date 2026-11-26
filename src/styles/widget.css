@@ -1,0 +1,122 @@
+/* Widget de escritorio: marco HUD sobre página transparente. La opacidad del fondo sale de
+   --wg-opacidad (la fija widget.ts desde los ajustes de widgets). */
+
+html, body { background: transparent; }
+.wg-body { margin: 0; overflow: hidden; user-select: none; }
+
+.wg {
+  --wg-opacidad: 0.75;
+  --wg-corte: 12px;
+  position: relative;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  /* El borde va en ::before: así sigue las esquinas cortadas */
+  background: rgba(var(--fondo-panel-rgb), var(--wg-opacidad));
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--wg-corte)) 0,
+    100% var(--wg-corte),
+    100% 100%,
+    var(--wg-corte) 100%,
+    0 calc(100% - var(--wg-corte))
+  );
+}
+.wg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--primario);
+  /* Línea de 1 px: polígono exterior e interior con relleno par-impar */
+  clip-path: polygon(evenodd,
+    0 0, calc(100% - var(--wg-corte)) 0, 100% var(--wg-corte), 100% 100%, var(--wg-corte) 100%, 0 calc(100% - var(--wg-corte)),
+    1px 1px, calc(100% - var(--wg-corte) - 0.4px) 1px, calc(100% - 1px) calc(var(--wg-corte) + 0.4px),
+    calc(100% - 1px) calc(100% - 1px), calc(var(--wg-corte) + 0.4px) calc(100% - 1px), 1px calc(100% - var(--wg-corte) - 0.4px));
+  opacity: 0.7;
+}
+
+.wg__barra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  padding: 6px 14px 0 12px;
+}
+.wg__titulo {
+  font-family: var(--fuente-titulo);
+  font-weight: 500;
+  font-size: var(--tam-xs);
+  letter-spacing: 0.2em;
+  color: var(--primario);
+}
+.wg__cuerpo {
+  display: grid;
+  place-items: center;
+  padding: 8px 12px 12px;
+  overflow: hidden;
+}
+.wg__marcador {
+  font-family: var(--fuente-datos);
+  font-size: var(--tam-s);
+  letter-spacing: 0.2em;
+  color: var(--texto-tenue);
+}
+
+/* Fuera de edición no hay nada que arrastrar ni pulsar */
+.wg__quitar, .wg__asa { display: none; }
+
+.wg--edicion::before { background: var(--cian); opacity: 1; }
+.wg--edicion::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  pointer-events: none;
+  border: 1px dashed var(--cian);
+}
+.wg--edicion .wg__barra {
+  cursor: move;
+  background: var(--cian-suave);
+  border-bottom: 1px solid var(--cian-tenue);
+}
+.wg--edicion .wg__titulo { color: var(--cian); }
+.wg--edicion .wg__cuerpo { pointer-events: none; }
+.wg--edicion .wg__quitar {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  padding: 0;
+  font: inherit;
+  font-size: var(--tam-xs);
+  line-height: 1;
+  color: var(--alerta);
+  background: transparent;
+  border: 1px solid var(--alerta-tenue);
+  cursor: pointer;
+}
+.wg--edicion .wg__quitar:hover { background: var(--alerta-suave); border-color: var(--alerta); }
+.wg--edicion .wg__asa {
+  display: block;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 50%, var(--cian) 50%, var(--cian) 58%, transparent 58%,
+    transparent 70%, var(--cian) 70%, var(--cian) 78%, transparent 78%);
+}
+
+/* Entrada única: un parpadeo breve */
+.wg--entrada { animation: wg-entrada 0.4s steps(8, end); }
+@keyframes wg-entrada {
+  0% { opacity: 0; }
+  25% { opacity: 0.8; }
+  50% { opacity: 0.4; }
+  100% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wg--entrada { animation: none; }
+}

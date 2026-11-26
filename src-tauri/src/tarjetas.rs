@@ -338,6 +338,8 @@ pub fn fantasma_mover(app: AppHandle, x: Option<f64>, y: Option<f64>) {
 #[tauri::command]
 pub fn fantasma_ocultar(app: AppHandle) {
     if let Some(v) = app.get_webview_window(FANTASMA) {
+        // Para su animación: una ventana oculta de WebView2 sigue pintando fotogramas
+        let _ = app.emit_to(FANTASMA, "fantasma://ocultar", ());
         let _ = v.hide();
     }
 }

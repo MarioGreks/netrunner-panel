@@ -2,12 +2,11 @@
 import { alEvento, muestraSistema, type MuestraSistema } from "../../lib/ipc";
 import { crearAnillo, crearOnda } from "../../ui/grafica";
 import { hacerDesacoplable } from "../../ui/desacoplar";
+import { gb } from "../../lib/texto";
 
+export { gb };
 export const UMBRAL_ALTO = 90; // por encima, el valor se pinta en rojo
 const SEGMENTOS_DISCO = 24;
-const GB = 1024 ** 3;
-
-export const gb = (bytes: number) => (bytes / GB).toFixed(1);
 
 const marco = (titulo: string, etiqueta: string, cuerpo: string, extra = "") => `
   <section class="marco ${extra}">

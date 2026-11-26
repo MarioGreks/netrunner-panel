@@ -3,6 +3,7 @@ import { Orbitron_400Regular, Orbitron_700Bold, useFonts } from '@expo-google-fo
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { ConexionProvider } from '../src/ConexionContext';
+import { NotasProvider } from '../src/notas/NotasContext';
 import { tema } from '../src/theme';
 
 export default function Layout() {
@@ -12,7 +13,9 @@ export default function Layout() {
     <>
       <StatusBar style="light" />
       <ConexionProvider>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: tema.colores.fondo } }} />
+        <NotasProvider>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: tema.colores.fondo } }} />
+        </NotasProvider>
       </ConexionProvider>
     </>
   );

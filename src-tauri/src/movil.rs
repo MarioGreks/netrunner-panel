@@ -22,7 +22,12 @@ pub const PUERTO_DEFECTO: u16 = 47821;
 const MAX_CUERPO: usize = 2 * 1024 * 1024;
 const MAX_CABECERAS: usize = 16 * 1024;
 const TIMEOUT_LECTURA: Duration = Duration::from_secs(5);
+/// Duración total del modo emparejar (los fallos se cuentan para toda la sesión).
 const VIDA_CODIGO: Duration = Duration::from_secs(300);
+/// El código que se muestra cambia cada 15 s.
+const ROTACION: Duration = Duration::from_secs(15);
+/// El código recién sustituido se acepta 5 s más, por si cambia mientras se escribe.
+const GRACIA: Duration = Duration::from_secs(5);
 const MAX_FALLOS: u8 = 5;
 const PAUSA_TOKEN: Duration = Duration::from_millis(300);
 const ESPERA_ACCEPT: Duration = Duration::from_millis(100);
@@ -47,50 +52,73 @@ pub enum ErrorEmparejar {
     Interno,
 }
 
-struct Codigo {
-    valor: String,
+/// Código de 6 cifras con bytes de uuid v4.
+fn codigo_aleatorio() -> String {
+    let b = *uuid::Uuid::new_v4().as_bytes();
+    format!("{:06}", u32::from_le_bytes([b[0], b[1], b[2], b[3]]) % 1_000_000)
+}
+
+/// Modo emparejar abierto: un código que rota cada 15 s, el anterior con su margen y los fallos.
+struct Sesion {
+    actual: String,
+    desde: Instant,
+    /// Código recién sustituido y hasta cuándo se acepta.
+    previo: Option<(String, Instant)>,
     caduca: Instant,
     fallos: u8,
 }
 
-/// Código de emparejamiento vigente (como mucho uno).
+/// Sesión de emparejamiento vigente (como mucho una).
 #[derive(Default)]
 pub struct Emparejamiento {
-    actual: Option<Codigo>,
+    sesion: Option<Sesion>,
 }
 
 impl Emparejamiento {
-    /// Genera un código de 6 cifras válido 5 minutos; sustituye al anterior.
+    /// Abre el modo emparejar durante 5 minutos (sustituye al anterior) y devuelve el primer código.
     pub fn nuevo(&mut self, ahora: Instant) -> String {
-        let b = *uuid::Uuid::new_v4().as_bytes();
-        let n = u32::from_le_bytes([b[0], b[1], b[2], b[3]]) % 1_000_000;
-        let valor = format!("{n:06}");
-        self.actual = Some(Codigo { valor: valor.clone(), caduca: ahora + VIDA_CODIGO, fallos: 0 });
-        valor
+        let actual = codigo_aleatorio();
+        self.sesion = Some(Sesion { actual: actual.clone(), desde: ahora, previo: None, caduca: ahora + VIDA_CODIGO, fallos: 0 });
+        actual
     }
 
-    /// Prueba un código. Si coincide se consume; tras 5 fallos queda anulado.
-    pub fn probar(&mut self, intento: &str, ahora: Instant) -> Result<(), ErrorEmparejar> {
-        let Some(c) = self.actual.as_mut() else { return Err(ErrorEmparejar::Codigo) };
-        if ahora >= c.caduca {
-            self.actual = None;
-            return Err(ErrorEmparejar::Codigo);
+    /// Cierra la sesión si caducó y, si toca, sustituye el código (una vez por cada tramo de 15 s pasado).
+    fn al_dia(&mut self, ahora: Instant) {
+        let Some(s) = self.sesion.as_mut() else { return };
+        if ahora >= s.caduca {
+            self.sesion = None;
+            return;
         }
-        if c.fallos >= MAX_FALLOS {
+        while ahora >= s.desde + ROTACION {
+            s.desde += ROTACION;
+            let anterior = std::mem::replace(&mut s.actual, codigo_aleatorio());
+            s.previo = Some((anterior, s.desde + GRACIA));
+        }
+    }
+
+    /// Prueba un código (el actual, o el anterior dentro de su margen). Si coincide se consume la
+    /// sesión; tras 5 fallos en la sesión queda anulada.
+    pub fn probar(&mut self, intento: &str, ahora: Instant) -> Result<(), ErrorEmparejar> {
+        self.al_dia(ahora);
+        let Some(s) = self.sesion.as_mut() else { return Err(ErrorEmparejar::Codigo) };
+        if s.fallos >= MAX_FALLOS {
             return Err(ErrorEmparejar::Intentos);
         }
-        if igual_const(&c.valor, intento) {
-            self.actual = None;
+        let vale_previo = s.previo.as_ref().is_some_and(|(v, hasta)| ahora < *hasta && igual_const(v, intento));
+        if igual_const(&s.actual, intento) || vale_previo {
+            self.sesion = None;
             return Ok(());
         }
-        c.fallos += 1;
+        s.fallos += 1;
         Err(ErrorEmparejar::Codigo)
     }
 
-    /// Código usable y segundos que le quedan (None si no hay, caducó o está anulado).
-    pub fn vigente(&self, ahora: Instant) -> Option<(String, u64)> {
-        let c = self.actual.as_ref()?;
-        (ahora < c.caduca && c.fallos < MAX_FALLOS).then(|| (c.valor.clone(), (c.caduca - ahora).as_secs()))
+    /// Código que hay que mostrar y segundos hasta que cambie (None si no hay sesión, caducó o está anulada).
+    pub fn vigente(&mut self, ahora: Instant) -> Option<(String, u64)> {
+        self.al_dia(ahora);
+        let s = self.sesion.as_ref().filter(|s| s.fallos < MAX_FALLOS)?;
+        let cambia = (s.desde + ROTACION).saturating_duration_since(ahora);
+        Some((s.actual.clone(), cambia.as_millis().div_ceil(1000) as u64))
     }
 }
 
@@ -417,7 +445,8 @@ pub struct EstadoMovil {
     pub ip: Option<String>,
     pub emparejado: bool,
     pub codigo: Option<String>,
-    pub caduca_en_s: Option<u64>,
+    /// Segundos hasta que el código cambie (rota cada 15 s).
+    pub cambia_en_s: Option<u64>,
     pub error: Option<String>,
 }
 
@@ -436,7 +465,7 @@ pub fn estado_movil(app: AppHandle) -> EstadoMovil {
         puerto,
         ip: ip_local(),
         emparejado,
-        caduca_en_s: vigente.as_ref().map(|v| v.1),
+        cambia_en_s: vigente.as_ref().map(|v| v.1),
         codigo: vigente.map(|v| v.0),
         error,
     }
@@ -613,6 +642,58 @@ mod pruebas {
         // un código nuevo vuelve a funcionar
         let n = e.nuevo(t0);
         assert_eq!(e.probar(&n, t0), Ok(()));
+    }
+
+    #[test]
+    fn el_codigo_cambia_cada_15_segundos() {
+        let (mut e, t0) = (Emparejamiento::default(), Instant::now());
+        let c0 = e.nuevo(t0);
+        assert_eq!(e.vigente(t0), Some((c0.clone(), 15)));
+        assert_eq!(e.vigente(t0 + Duration::from_millis(14_200)), Some((c0.clone(), 1)));
+        let (c1, quedan) = e.vigente(t0 + ROTACION).unwrap();
+        assert_eq!(quedan, 15);
+        // el nuevo vale al momento
+        let mut otra = Emparejamiento::default();
+        otra.nuevo(t0);
+        let p1 = otra.vigente(t0 + ROTACION).unwrap().0;
+        assert_eq!(otra.probar(&p1, t0 + ROTACION), Ok(()));
+        // el anterior se acepta solo durante el margen (salvo que el azar lo repita, 1 entre un millón)
+        if c1 != c0 {
+            assert_eq!(e.probar(&c0, t0 + ROTACION + GRACIA - Duration::from_millis(1)), Ok(()));
+        }
+        let mut tarde = Emparejamiento::default();
+        let q0 = tarde.nuevo(t0);
+        let ahora = t0 + ROTACION + GRACIA;
+        if tarde.vigente(ahora).unwrap().0 != q0 {
+            assert_eq!(tarde.probar(&q0, ahora), Err(ErrorEmparejar::Codigo));
+        }
+    }
+
+    #[test]
+    fn la_sesion_dura_5_minutos_aunque_rote() {
+        let (mut e, t0) = (Emparejamiento::default(), Instant::now());
+        e.nuevo(t0);
+        let casi = t0 + VIDA_CODIGO - Duration::from_secs(1);
+        let c = e.vigente(casi).unwrap().0;
+        assert_eq!(e.probar(&c, casi), Ok(()));
+        let mut f = Emparejamiento::default();
+        f.nuevo(t0);
+        assert!(f.vigente(t0 + VIDA_CODIGO).is_none());
+    }
+
+    #[test]
+    fn los_fallos_cuentan_para_toda_la_sesion() {
+        let (mut e, t0) = (Emparejamiento::default(), Instant::now());
+        e.nuevo(t0);
+        for i in 0..u32::from(MAX_FALLOS) {
+            let t = t0 + ROTACION * i;
+            let bueno = e.vigente(t).unwrap().0;
+            let malo = if bueno == "000000" { "000001" } else { "000000" };
+            assert_eq!(e.probar(malo, t), Err(ErrorEmparejar::Codigo));
+        }
+        let t = t0 + ROTACION * u32::from(MAX_FALLOS);
+        assert!(e.vigente(t).is_none());
+        assert_eq!(e.probar("123456", t), Err(ErrorEmparejar::Intentos));
     }
 
     #[test]

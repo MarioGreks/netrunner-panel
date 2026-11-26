@@ -52,7 +52,8 @@ export interface EstadoMovil {
   emparejado: boolean;
   /** Código de emparejamiento vigente (6 cifras) y segundos que le quedan. */
   codigo: string | null;
-  caduca_en_s: number | null;
+  /** Segundos hasta que el código cambie (rota cada 15 s). */
+  cambia_en_s: number | null;
   error: string | null;
 }
 

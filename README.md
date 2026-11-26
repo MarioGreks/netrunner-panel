@@ -69,7 +69,7 @@ Abre el panel y pulsa el engranaje para entrar en AJUSTES.
 El panel puede abrir un pequeño servidor en tu red local para que la app móvil sincronice notas y tareas y lea la agenda. Viene apagado.
 
 1. En AJUSTES, sección CONEXIÓN MÓVIL, marca ACTIVAR. La primera vez Windows preguntará si permites el acceso a la red: pulsa Permitir.
-2. Pulsa EMPAREJAR MÓVIL: aparece un código de 6 cifras que vale 5 minutos. Escríbelo en la app móvil, junto con la IP y el puerto (47821) que muestra el panel.
+2. Pulsa EMPAREJAR MÓVIL: aparece un código de 6 cifras que cambia cada 15 segundos (el modo emparejar dura 5 minutos y admite 5 fallos). Escríbelo en la app móvil, junto con la IP y el puerto (47821) que muestra el panel.
 3. Solo hay un móvil emparejado a la vez; DESVINCULAR lo olvida.
 
 Úsalo solo en redes de confianza (casa): los datos viajan sin cifrar por el WiFi.

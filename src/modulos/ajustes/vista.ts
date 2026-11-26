@@ -322,8 +322,7 @@ export function montar(contenedor: HTMLElement, opciones: OpcionesAjustes): () =
     movCodigo.hidden = e.codigo === null;
     if (e.codigo !== null) {
       q("mov-codigo-num").textContent = e.codigo;
-      const s = e.caduca_en_s ?? 0;
-      q("mov-codigo-t").textContent = `CADUCA EN ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      q("mov-codigo-t").textContent = `CAMBIA EN ${e.cambia_en_s ?? 0} S`;
     }
     q("mov-error").textContent = e.error ?? "";
   };

@@ -1,133 +1,115 @@
 import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 import { Boton } from '../src/components/Boton';
 import { CampoTexto } from '../src/components/CampoTexto';
 import { Marco } from '../src/components/Marco';
 import { Pantalla } from '../src/components/Pantalla';
-import { useConexion } from '../src/ConexionContext';
-import { redirectUri } from '../src/microsoft';
-import { buscarCarpetas, carpetaPorRuta, listarFicheros, type Carpeta } from '../src/onedrive';
+import { PUERTO_DEFECTO, useConexion } from '../src/ConexionContext';
 import { tema } from '../src/theme';
 
-const REQUERIDOS = ['notas.json', 'cuentas.json', 'ajustes.json'];
-type Fichero = Awaited<ReturnType<typeof listarFicheros>>[number];
 const alerta = { color: tema.colores.alerta };
-const mensaje = (e: unknown) => (e instanceof Error ? e.message : 'ERROR DESCONOCIDO');
+const IPV4 = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+
+/** Devuelve el puerto o un texto de error. */
+function validar(host: string, puerto: string, codigo?: string): { host: string; puerto: number } | string {
+  const h = host.trim();
+  if (!IPV4.test(h)) return 'IP NO VÁLIDA (EJ. 192.168.1.20)';
+  const p = Number(puerto.trim());
+  if (!/^\d+$/.test(puerto.trim()) || p < 1 || p > 65535) return 'PUERTO NO VÁLIDO (1-65535)';
+  if (codigo !== undefined && !/^\d{6}$/.test(codigo.trim())) return 'EL CÓDIGO TIENE 6 CIFRAS';
+  return { host: h, puerto: p };
+}
 
 export default function Ajustes() {
   const c = useConexion();
-  const [resultados, setResultados] = useState<Carpeta[] | null>(null);
-  const [ruta, setRuta] = useState('');
-  const [errorCarpeta, setErrorCarpeta] = useState<string | null>(null);
-  const [ficheros, setFicheros] = useState<Fichero[] | null>(null);
-  const [errorPrueba, setErrorPrueba] = useState<string | null>(null);
+  const [host, setHost] = useState('');
+  const [puerto, setPuerto] = useState(String(PUERTO_DEFECTO));
+  const [codigo, setCodigo] = useState('');
+  const [editando, setEditando] = useState(false);
+  const [errorLocal, setErrorLocal] = useState<string | null>(null);
+  const [ocupado, setOcupado] = useState(false);
 
-  const elegir = async (f: Carpeta) => {
-    await c.elegirCarpeta(f);
-    setResultados(null);
-    setFicheros(null);
-  };
-  const buscar = async () => {
-    setErrorCarpeta(null);
-    try {
-      setResultados(await buscarCarpetas());
-    } catch (e) {
-      setErrorCarpeta(mensaje(e));
-    }
-  };
-  const usarRuta = async () => {
-    setErrorCarpeta(null);
-    try {
-      const f = await carpetaPorRuta(ruta);
-      if (f === null) setErrorCarpeta('RUTA NO ENCONTRADA O NO ES UNA CARPETA');
-      else await elegir(f);
-    } catch (e) {
-      setErrorCarpeta(mensaje(e));
-    }
-  };
-  const cambiar = async () => {
-    await c.olvidarCarpeta();
-    setFicheros(null);
-  };
-  const probar = async () => {
-    setErrorPrueba(null);
-    try {
-      setFicheros(await listarFicheros());
-    } catch (e) {
-      setFicheros(null);
-      setErrorPrueba(mensaje(e));
-    }
-  };
+  const mensaje = (e: unknown) => (e instanceof Error ? e.message : 'ERROR DESCONOCIDO');
 
-  const conSesion = c.estado === 'conectada';
+  const emparejar = async () => {
+    const v = validar(host, puerto, codigo);
+    if (typeof v === 'string') return setErrorLocal(v);
+    setErrorLocal(null);
+    setOcupado(true);
+    try {
+      await c.emparejar(v.host, v.puerto, codigo.trim());
+      setCodigo('');
+    } catch (e) {
+      setErrorLocal(mensaje(e));
+    } finally {
+      setOcupado(false);
+    }
+  };
+  const abrirCambio = () => {
+    setHost(c.panel?.host ?? '');
+    setPuerto(String(c.panel?.puerto ?? PUERTO_DEFECTO));
+    setErrorLocal(null);
+    setEditando(true);
+  };
+  const guardarCambio = async () => {
+    const v = validar(host, puerto);
+    if (typeof v === 'string') return setErrorLocal(v);
+    setErrorLocal(null);
+    try {
+      await c.cambiarDireccion(v.host, v.puerto);
+      setEditando(false);
+    } catch (e) {
+      setErrorLocal(mensaje(e));
+    }
+  };
+  const olvidar = () =>
+    Alert.alert('OLVIDAR PANEL', 'Habrá que volver a emparejar. Las notas y tareas de la app se conservan.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Olvidar', style: 'destructive', onPress: () => void c.olvidar() },
+    ]);
+
+  const campoDireccion = (
+    <>
+      <CampoTexto value={host} onChangeText={setHost} placeholder="IP DEL PC (192.168.1.20)" keyboardType="numbers-and-punctuation" autoCapitalize="none" autoCorrect={false} />
+      <CampoTexto value={puerto} onChangeText={setPuerto} placeholder="PUERTO" keyboardType="number-pad" />
+    </>
+  );
+  const error = errorLocal ?? c.error;
+
   return (
     <Pantalla titulo="AJUSTES">
       <View style={{ gap: tema.esp[3] }}>
-        <Marco titulo="CUENTA MICROSOFT" variante="cian">
-          {c.estado === 'sin-cliente' && (
-            <Text style={[tema.cuerpo, alerta]}>
-              FALTA EL CLIENT ID: copia movil/.env.example a movil/.env y pon EXPO_PUBLIC_MS_CLIENT_ID; reinicia expo
-            </Text>
+        <Marco titulo="PANEL DEL PC" variante="cian">
+          {c.estado === 'sin-emparejar' ? (
+            <View style={{ gap: tema.esp[3] }}>
+              <Text style={tema.tenue}>EN EL PC: AJUSTES → CONEXIÓN MÓVIL → ACTIVAR → EMPAREJAR MÓVIL</Text>
+              {campoDireccion}
+              <CampoTexto value={codigo} onChangeText={setCodigo} placeholder="CÓDIGO (6 CIFRAS)" keyboardType="number-pad" maxLength={6} />
+              <Boton texto={ocupado ? 'EMPAREJANDO…' : 'EMPAREJAR'} onPress={() => void (ocupado ? undefined : emparejar())} />
+            </View>
+          ) : editando ? (
+            <View style={{ gap: tema.esp[3] }}>
+              {campoDireccion}
+              <Boton texto="GUARDAR" onPress={() => void guardarCambio()} />
+              <Boton texto="CANCELAR" variante="contorno" onPress={() => setEditando(false)} />
+            </View>
+          ) : (
+            <View style={{ gap: tema.esp[3] }}>
+              <Text style={tema.dato}>
+                {c.panel?.host}:{c.panel?.puerto}
+              </Text>
+              <Text style={c.alcanzable === true ? { ...tema.cuerpo, color: tema.colores.secundario } : tema.tenue}>
+                {c.alcanzable === null ? 'COMPROBANDO…' : c.alcanzable ? 'ALCANZABLE' : 'NO ALCANZABLE'}
+              </Text>
+              {c.version !== undefined && <Text style={tema.tenue}>PANEL v{c.version}</Text>}
+              <Boton texto="PROBAR" onPress={() => void c.comprobar()} />
+              <Boton texto="CAMBIAR IP" variante="contorno" onPress={abrirCambio} />
+              <Boton texto="OLVIDAR" variante="contorno" color={tema.colores.alerta} onPress={olvidar} />
+            </View>
           )}
-          {c.estado === 'conectando' && <Text style={tema.tenue}>CONECTANDO…</Text>}
-          {c.estado === 'sin-sesion' && <Boton texto="CONECTAR" onPress={c.conectar} />}
-          {conSesion && (
-            <>
-              <Text style={tema.dato}>{c.cuenta?.nombre}</Text>
-              <Text style={[tema.cuerpo, { marginBottom: tema.esp[4] }]}>{c.cuenta?.correo}</Text>
-              <Boton texto="DESCONECTAR" variante="contorno" onPress={() => void c.desconectar()} />
-            </>
-          )}
-          {c.error !== null && <Text style={[tema.cuerpo, alerta, { marginTop: tema.esp[3] }]}>{c.error}</Text>}
-          <Text style={[tema.tenue, { marginTop: tema.esp[4], letterSpacing: 0 }]}>URI DE REDIRECCIÓN:</Text>
-          <Text selectable style={[tema.tenue, { letterSpacing: 0 }]}>{redirectUri()}</Text>
+          {error !== null && <Text style={[tema.cuerpo, alerta, { marginTop: tema.esp[3] }]}>{error}</Text>}
         </Marco>
-
-        {conSesion && (
-          <Marco titulo="CARPETA ONEDRIVE">
-            {c.carpeta !== null ? (
-              <>
-                <Text selectable style={[tema.dato, { marginBottom: tema.esp[4] }]}>{c.carpeta.ruta}</Text>
-                <Boton texto="CAMBIAR" variante="contorno" onPress={() => void cambiar()} />
-              </>
-            ) : (
-              <View style={{ gap: tema.esp[3] }}>
-                <Boton texto="BUSCAR" onPress={() => void buscar()} />
-                {resultados?.map((f) => (
-                  <Boton key={f.folderId} texto={f.ruta} variante="contorno" color={tema.colores.secundario} onPress={() => void elegir(f)} />
-                ))}
-                {resultados?.length === 0 && (
-                  <>
-                    <Text style={tema.tenue}>NO ENCONTRADA</Text>
-                    <CampoTexto value={ruta} onChangeText={setRuta} placeholder="Sincronización Netrunner/netrunner-panel" autoCapitalize="none" autoCorrect={false} />
-                    <Boton texto="USAR RUTA" onPress={() => void usarRuta()} />
-                  </>
-                )}
-              </View>
-            )}
-            {errorCarpeta !== null && <Text style={[tema.cuerpo, alerta, { marginTop: tema.esp[3] }]}>{errorCarpeta}</Text>}
-          </Marco>
-        )}
-
-        {conSesion && c.carpeta !== null && (
-          <Marco titulo="PRUEBA" variante="cian">
-            <Boton texto="PROBAR CONEXIÓN" onPress={() => void probar()} />
-            {errorPrueba !== null && <Text style={[tema.cuerpo, alerta, { marginTop: tema.esp[3] }]}>{errorPrueba}</Text>}
-            {ficheros !== null && (
-              <View style={{ marginTop: tema.esp[3], gap: tema.esp[1] }}>
-                {ficheros.map((f) => (
-                  <Text key={f.name} style={tema.cuerpo}>
-                    {REQUERIDOS.includes(f.name) ? '✓ ' : '  '}
-                    {f.name} · {(f.size / 1024).toFixed(1)} KB · {new Date(f.lastModifiedDateTime).toLocaleString('es-ES')}
-                  </Text>
-                ))}
-                {REQUERIDOS.filter((n) => !ficheros.some((f) => f.name === n)).map((n) => (
-                  <Text key={n} style={[tema.cuerpo, alerta]}>{n} · FALTA</Text>
-                ))}
-              </View>
-            )}
-          </Marco>
-        )}
+        <Text style={tema.tenue}>SOLO SINCRONIZA EN LA MISMA WIFI QUE EL PC CON EL PANEL ABIERTO. SIN CONEXIÓN, LA APP FUNCIONA CON SU COPIA.</Text>
       </View>
     </Pantalla>
   );

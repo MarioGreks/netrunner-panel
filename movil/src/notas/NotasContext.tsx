@@ -2,14 +2,12 @@ import * as Crypto from 'expo-crypto';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AppState } from 'react-native';
 import { useConexion } from '../ConexionContext';
-import { leerJson, escribirJson } from '../onedrive';
+import { NoAlcanzable, TokenInvalido, sincronizarNotas } from '../panel';
 import { cargarCopia, cargarUltimaSync, guardarCopia, guardarUltimaSync } from './almacen';
-import { esDatosLegible, fusionar, igual, normalizar, purgar, type Datos, type Nota, type Tarea } from './fusion';
+import { esDatosLegible, fusionar, normalizar, purgar, type Datos, type Nota, type Tarea } from './fusion';
 
-const ARCHIVO = 'notas.json';
 const RETARDO_CAMBIO = 2000;
 const INTERVALO_SYNC = 5 * 60 * 1000;
-const MAX_INTENTOS = 3;
 
 interface Notas {
   tareasPendientes: Tarea[];
@@ -18,6 +16,8 @@ interface Notas {
   sincronizando: boolean;
   ultimaSync: number | null;
   error: string | null;
+  /** Aviso tenue (no es un error): p. ej. panel no alcanzable. */
+  aviso: string | null;
   sincronizar: () => Promise<void>;
   crearTarea: (texto: string) => void;
   editarTarea: (id: string, texto: string) => void;
@@ -41,7 +41,9 @@ const maxOrden = (d: Datos) => d.tareas.reduce((m, t) => (t.borrada ? m : Math.m
 
 export function NotasProvider({ children }: { children: ReactNode }) {
   const conexion = useConexion();
-  const puede = conexion.estado === 'conectada' && conexion.carpeta !== null;
+  const puede = conexion.estado === 'emparejado';
+  const conexionRef = useRef(conexion);
+  conexionRef.current = conexion;
   const puedeRef = useRef(puede);
   puedeRef.current = puede;
 
@@ -52,6 +54,7 @@ export function NotasProvider({ children }: { children: ReactNode }) {
   const [sincronizando, setSincronizando] = useState(false);
   const [ultimaSync, setUltimaSync] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   const enCurso = useRef(false);
   const pendiente = useRef(false);
@@ -88,47 +91,27 @@ export function NotasProvider({ children }: { children: ReactNode }) {
     }
 
     async function una(): Promise<void> {
-      for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
-        let remoto: { datos: unknown; etag: string | null };
-        try {
-          remoto = await leerJson<unknown>(ARCHIVO);
-        } catch (e) {
-          // remoto ilegible o corrupto: no se escribe nada
-          setError(e instanceof Error ? e.message : 'ERROR DE SINCRONIZACIÓN');
+      try {
+        const remoto = await sincronizarNotas(ref.current);
+        if (!esDatosLegible(remoto)) {
+          setError('RESPUESTA DEL PANEL SIN EL FORMATO ESPERADO: NO SE TOCA');
           return;
         }
-        if (remoto.datos !== null && !esDatosLegible(remoto.datos)) {
-          setError(`${ARCHIVO} NO TIENE EL FORMATO DEL PANEL: NO SE TOCA`);
-          return;
-        }
-        try {
-          const local = ref.current;
-          const rem = remoto.datos === null ? null : normalizar(remoto.datos);
-          const fusionado = purgar(rem !== null ? fusionar(local, rem) : local, Date.now());
-          if (rem === null && fusionado.tareas.length + fusionado.notas.length === 0) {
-            // posible carpeta equivocada: no se crea nada
-          } else if (rem === null || !igual(rem, fusionado)) {
-            const r = await escribirJson(ARCHIVO, fusionado, remoto.etag);
-            if (!r.ok) {
-              if (intento === MAX_INTENTOS) {
-                setError('CONFLICTO: REINTENTA');
-                return;
-              }
-              continue;
-            }
-          }
-          // Los cambios hechos durante el await ya están en ref.current: se fusionan encima (ganan por `modificada`)
-          // y los sube la sincronización que ellos mismos programaron.
-          poner(purgar(fusionar(ref.current, fusionado), Date.now()));
-          const ahora = Date.now();
-          guardarUltimaSync(ahora);
-          setUltimaSync(ahora);
-          setError(null);
-          return;
-        } catch (e) {
-          setError(e instanceof Error ? e.message : 'ERROR DE SINCRONIZACIÓN');
-          return;
-        }
+        // Los cambios hechos durante el await ya están en ref.current: se fusionan encima (ganan por `modificada`)
+        // y los sube la sincronización que ellos mismos programaron.
+        poner(purgar(fusionar(ref.current, normalizar(remoto)), Date.now()));
+        const ahora = Date.now();
+        guardarUltimaSync(ahora);
+        setUltimaSync(ahora);
+        setError(null);
+        setAviso(null);
+        conexionRef.current.informar(true);
+      } catch (e) {
+        if (e instanceof NoAlcanzable) {
+          setAviso('PANEL NO ALCANZABLE');
+          conexionRef.current.informar(false);
+        } else if (e instanceof TokenInvalido) void conexionRef.current.caducado();
+        else setError(e instanceof Error ? e.message : 'ERROR DE SINCRONIZACIÓN');
       }
     }
   }, [poner]);
@@ -201,6 +184,7 @@ export function NotasProvider({ children }: { children: ReactNode }) {
       sincronizando,
       ultimaSync,
       error,
+      aviso,
       sincronizar,
       crearTarea: (texto) => {
         const limpio = texto.trim();
@@ -227,7 +211,7 @@ export function NotasProvider({ children }: { children: ReactNode }) {
       editarNota: (id, titulo, cuerpo) => mutar((d, ahora) => ({ ...d, notas: d.notas.map((x) => (x.id === id ? { ...x, titulo, cuerpo, modificada: ahora, borrada: false } : x)) })),
       borrarNota: (id) => mutar((d, ahora) => ({ ...d, notas: d.notas.map((x) => (x.id === id ? { ...x, borrada: true, titulo: '', cuerpo: '', modificada: ahora } : x)) })),
     };
-  }, [datos, sincronizando, ultimaSync, error, sincronizar, mutar]);
+  }, [datos, sincronizando, ultimaSync, error, aviso, sincronizar, mutar]);
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }

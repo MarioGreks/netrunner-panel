@@ -22,7 +22,7 @@ export default function Tareas() {
   const [texto, setTexto] = useState('');
 
   const hayDatos = n.tareasPendientes.length + n.tareasHechas.length > 0;
-  const sinConexion = c.estado !== 'conectada' || c.carpeta === null;
+  const sinConexion = c.estado !== 'emparejado';
 
   const crear = () => {
     n.crearTarea(nueva);

@@ -19,7 +19,7 @@ export default function Notas() {
   const c = useConexion();
   const n = useNotas();
   const router = useRouter();
-  const sinConexion = c.estado !== 'conectada' || c.carpeta === null;
+  const sinConexion = c.estado !== 'emparejado';
 
   return (
     <Pantalla titulo="NOTAS" acciones={<AccionSync />} refrescar={<TirarSync />}>

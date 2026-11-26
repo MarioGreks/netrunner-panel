@@ -16,10 +16,11 @@ export function AccionSync() {
   );
 }
 
-/** «SYNC hh:mm» tenue, o el error en alerta. */
+/** «SYNC hh:mm» tenue, el aviso (panel no alcanzable) tenue, o el error en alerta. */
 export function LineaSync() {
   const n = useNotas();
   if (n.error !== null) return <Text style={[tema.cuerpo, { color: tema.colores.alerta }]}>{n.error}</Text>;
+  if (n.aviso !== null && !n.sincronizando) return <Text style={tema.tenue}>{n.aviso}{n.ultimaSync !== null ? ` · SYNC ${hora(n.ultimaSync)}` : ''}</Text>;
   return <Text style={tema.tenue}>{n.sincronizando ? 'SINCRONIZANDO' : n.ultimaSync !== null ? `SYNC ${hora(n.ultimaSync)}` : 'SIN SINCRONIZAR'}</Text>;
 }
 

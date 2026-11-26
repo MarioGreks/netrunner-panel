@@ -1,18 +1,36 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { cerrarSesion, clientIdConfigurado, obtenerToken, perfil, SinSesion, useLoginMicrosoft } from './microsoft';
-import { carpetaGuardada, guardarCarpeta, olvidarCarpeta as olvidarGuardada, type Carpeta } from './onedrive';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { AppState } from 'react-native';
+import {
+  PUERTO_DEFECTO,
+  TokenInvalido,
+  configuracion,
+  emparejar as emparejarPanel,
+  estadoPanel,
+  guardarConfiguracion,
+  hayToken,
+  olvidarPanel,
+  olvidarToken,
+  type ConfigPanel,
+} from './panel';
 
-type Estado = 'sin-cliente' | 'sin-sesion' | 'conectando' | 'conectada';
+type Estado = 'sin-emparejar' | 'emparejado';
 
 interface Conexion {
   estado: Estado;
-  cuenta?: { nombre: string; correo: string };
-  carpeta: Carpeta | null;
+  /** null = sin comprobar aún. */
+  alcanzable: boolean | null;
+  panel: ConfigPanel | null;
+  version?: string;
   error: string | null;
-  conectar: () => void;
-  desconectar: () => Promise<void>;
-  elegirCarpeta: (c: Carpeta) => Promise<void>;
-  olvidarCarpeta: () => Promise<void>;
+  emparejar: (host: string, puerto: number, codigo: string) => Promise<void>;
+  comprobar: () => Promise<void>;
+  /** Cambia IP/puerto sin re-emparejar. */
+  cambiarDireccion: (host: string, puerto: number) => Promise<void>;
+  olvidar: () => Promise<void>;
+  /** Para quien sincroniza: resultado de una llamada al panel. */
+  informar: (alcanzable: boolean) => void;
+  /** Para quien sincroniza: una llamada dio TokenInvalido. */
+  caducado: () => Promise<void>;
 }
 
 const Ctx = createContext<Conexion | null>(null);
@@ -23,72 +41,99 @@ export function useConexion(): Conexion {
   return c;
 }
 
-const textoError = (e: unknown) => (e instanceof SinSesion ? null : e instanceof Error ? e.message : 'ERROR DESCONOCIDO');
+export { PUERTO_DEFECTO };
 
 export function ConexionProvider({ children }: { children: ReactNode }) {
-  const [estado, setEstado] = useState<Estado>(clientIdConfigurado() ? 'conectando' : 'sin-cliente');
-  const [cuenta, setCuenta] = useState<Conexion['cuenta']>();
-  const [carpeta, setCarpeta] = useState<Carpeta | null>(null);
+  const [estado, setEstado] = useState<Estado>('sin-emparejar');
+  const [alcanzable, setAlcanzable] = useState<boolean | null>(null);
+  const [panel, setPanel] = useState<ConfigPanel | null>(null);
+  const [version, setVersion] = useState<string | undefined>();
   const [error, setError] = useState<string | null>(null);
+  const emparejado = useRef(false);
 
-  const cargarPerfil = useCallback(async () => {
-    try {
-      setCuenta(await perfil());
-      setEstado('conectada');
-      setError(null);
-    } catch (e) {
-      setEstado('sin-sesion');
-      setError(textoError(e));
-    }
+  const caducado = useCallback(async () => {
+    await olvidarToken();
+    emparejado.current = false;
+    setEstado('sin-emparejar');
+    setAlcanzable(null);
+    setVersion(undefined);
+    setError(new TokenInvalido().message);
   }, []);
 
-  const { iniciar, listo } = useLoginMicrosoft((fallo) => {
-    if (fallo === null) void cargarPerfil();
-    else {
-      setEstado('sin-sesion');
-      setError(fallo ?? null);
-    }
-  });
-
-  useEffect(() => {
-    void carpetaGuardada().then(setCarpeta);
-    if (!clientIdConfigurado()) return;
-    obtenerToken().then(cargarPerfil, (e) => {
-      setEstado('sin-sesion');
-      setError(textoError(e));
-    });
-  }, [cargarPerfil]);
-
-  const valor: Conexion = {
-    estado,
-    cuenta,
-    carpeta,
-    error,
-    conectar: () => {
-      if (!listo) return;
+  const comprobar = useCallback(async () => {
+    if (!emparejado.current) return;
+    try {
+      const e = await estadoPanel();
+      setAlcanzable(true);
+      setVersion(e.version);
       setError(null);
-      setEstado('conectando');
-      void iniciar();
-    },
-    desconectar: async () => {
-      await cerrarSesion();
-      setCuenta(undefined);
-      setEstado('sin-sesion');
-    },
-    elegirCarpeta: async (c) => {
-      await guardarCarpeta(c);
-      setCarpeta(c);
-    },
-    olvidarCarpeta: async () => {
-      await olvidarGuardada();
-      setCarpeta(null);
-    },
-  };
+    } catch (e) {
+      if (e instanceof TokenInvalido) await caducado();
+      else setAlcanzable(false);
+    }
+  }, [caducado]);
+
+  // Arranque: carga la configuración y comprueba.
+  useEffect(() => {
+    void (async () => {
+      const [c, t] = await Promise.all([configuracion(), hayToken()]);
+      setPanel(c);
+      if (c !== null && t) {
+        emparejado.current = true;
+        setEstado('emparejado');
+        await comprobar();
+      }
+    })();
+  }, [comprobar]);
+
+  // Al volver a primer plano.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (e) => {
+      if (e === 'active') void comprobar();
+    });
+    return () => sub.remove();
+  }, [comprobar]);
+
+  const valor: Conexion = useMemo(
+    () => ({
+      estado,
+      alcanzable,
+      panel,
+      version,
+      error,
+      emparejar: async (host, puerto, codigo) => {
+        setError(null);
+        await emparejarPanel(host, puerto, codigo); // lanza con el texto ya traducido
+        emparejado.current = true;
+        setPanel({ host, puerto });
+        setEstado('emparejado');
+        await comprobar();
+      },
+      comprobar,
+      cambiarDireccion: async (host, puerto) => {
+        await guardarConfiguracion({ host, puerto });
+        setPanel({ host, puerto });
+        setAlcanzable(null);
+        await comprobar();
+      },
+      olvidar: async () => {
+        await olvidarPanel();
+        emparejado.current = false;
+        setPanel(null);
+        setEstado('sin-emparejar');
+        setAlcanzable(null);
+        setVersion(undefined);
+        setError(null);
+      },
+      informar: setAlcanzable,
+      caducado,
+    }),
+    [estado, alcanzable, panel, version, error, comprobar, caducado],
+  );
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }
 
 /** Texto de las pantallas aún vacías según el estado de la conexión. */
 export function textoVacio(c: Conexion): string {
-  if (c.estado !== 'conectada') return 'CONECTA TU CUENTA EN AJUSTES';
-  return c.carpeta === null ? 'ELIGE LA CARPETA EN AJUSTES' : 'PRÓXIMAMENTE';
+  return c.estado === 'emparejado' ? 'PRÓXIMAMENTE' : 'EMPAREJA EL MÓVIL CON EL PANEL EN AJUSTES';
 }

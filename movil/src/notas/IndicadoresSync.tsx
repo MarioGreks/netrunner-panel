@@ -1,4 +1,4 @@
-import { Pressable, RefreshControl, Text } from 'react-native';
+import { Pressable, RefreshControl, type RefreshControlProps, Text } from 'react-native';
 import { Icono } from '../iconos';
 import { tema } from '../theme';
 import { useNotas } from './NotasContext';
@@ -24,8 +24,17 @@ export function LineaSync() {
   return <Text style={tema.tenue}>{n.sincronizando ? 'SINCRONIZANDO' : n.ultimaSync !== null ? `SYNC ${hora(n.ultimaSync)}` : 'SIN SINCRONIZAR'}</Text>;
 }
 
-/** Tirar para sincronizar. */
-export function TirarSync() {
+/** Tirar para sincronizar. En Android el ScrollView clona este elemento y le pasa su contenido
+ *  como hijos (y un style): hay que reenviar las props o la pantalla se queda en negro. */
+export function TirarSync(props: Partial<RefreshControlProps>) {
   const n = useNotas();
-  return <RefreshControl refreshing={n.sincronizando} onRefresh={() => void n.sincronizar()} tintColor={tema.colores.secundario} colors={[tema.colores.secundario]} />;
+  return (
+    <RefreshControl
+      {...props}
+      refreshing={n.sincronizando}
+      onRefresh={() => void n.sincronizar()}
+      tintColor={tema.colores.secundario}
+      colors={[tema.colores.secundario]}
+    />
+  );
 }

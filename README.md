@@ -137,6 +137,8 @@ npm run release:preparar -- --notas "Qué hay de nuevo"
 gh release create v<versión> release/Netrunner-Panel-Setup.exe release/latest.json
 ```
 
+5. Actualiza la ficha de Netrunner Panel en el Archivo (repo `Archivo`, GitHub Pages) con la skill `/subir-archivo`: versión, peso del instalador, fecha y, si cambió algo visible, resumen, boceto y guía. Una versión no está terminada hasta que el Archivo muestra el mismo número que la release.
+
 ## Estructura
 
 ```
